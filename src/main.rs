@@ -1,7 +1,7 @@
+use glib::timeout_add_local;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, DrawingArea};
 use gtk4_layer_shell::{Layer, LayerShell};
-use glib::timeout_add_local;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -16,14 +16,13 @@ const IDLE_SPRITES: &[&str] = &[
     "cat/move 7.png",
 ];
 
-const MOVE_SPRITES: &[&str] = &[
-    "cat/move 1.png",
-    "cat/move 2.png",
-    "cat/move 3.png",
-];
+const MOVE_SPRITES: &[&str] = &["cat/move 1.png", "cat/move 2.png", "cat/move 3.png"];
 
 #[derive(PartialEq)]
-enum CatState { Idle, Moving }
+enum CatState {
+    Idle,
+    Moving,
+}
 
 struct State {
     x: f64,
@@ -60,10 +59,13 @@ impl State {
 }
 
 fn load_pixbufs(paths: &[&str]) -> Vec<gdk_pixbuf::Pixbuf> {
-    paths.iter().map(|path| {
-        gdk_pixbuf::Pixbuf::from_file_at_scale(path, CAT_SIZE, CAT_SIZE, true)
-            .unwrap_or_else(|e| panic!("Не могу загрузить {path}: {e}"))
-    }).collect()
+    paths
+        .iter()
+        .map(|path| {
+            gdk_pixbuf::Pixbuf::from_file_at_scale(path, CAT_SIZE, CAT_SIZE, true)
+                .unwrap_or_else(|e| panic!("Не могу загрузить {path}: {e}"))
+        })
+        .collect()
 }
 
 fn main() {
@@ -110,7 +112,11 @@ fn main() {
         drawing.set_draw_func(move |_, cr, w, _h| {
             let s = state_draw.borrow();
 
-            let frames = if s.cat_state == CatState::Idle { &idle_draw } else { &move_draw };
+            let frames = if s.cat_state == CatState::Idle {
+                &idle_draw
+            } else {
+                &move_draw
+            };
             let tex = &frames[s.frame % frames.len()];
 
             // Прозрачный фон
@@ -180,10 +186,9 @@ fn main() {
         let window_tick = window.clone();
         timeout_add_local(Duration::from_millis(TICK_MS), move || {
             let mut s = state_tick.borrow_mut();
-
             let speed = (s.cursor_vx * s.cursor_vx + s.cursor_vy * s.cursor_vy).sqrt();
 
-            if !s.dragging && speed > 8.0 {
+            if !s.dragging && speed > 1.5 {
                 // Режим движения
                 if s.cat_state != CatState::Moving {
                     s.cat_state = CatState::Moving;
@@ -192,13 +197,23 @@ fn main() {
                     s.frame = (s.frame + 1) % MOVE_SPRITES.len();
                 }
 
-                let step = if speed > 25.0 { 12.0 } else { 6.0 };
+                // Увеличиваем скорость (40 пикселей за тик вместо 6-12)
+                let target_speed = 40.0;
                 let dist = speed.max(1.0);
-                s.x += s.cursor_vx / dist * step;
-                s.y += s.cursor_vy / dist * step;
-                s.flip = s.cursor_vx < 0.0;
+                s.x += (s.cursor_vx / dist) * target_speed;
+                s.y += (s.cursor_vy / dist) * target_speed;
+
+                // Переворачиваем спрайт только при уверенном движении по X (убираем дрожание)
+                if s.cursor_vx.abs() > 2.0 {
+                    s.flip = s.cursor_vx < 0.0;
+                }
+
                 window_tick.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
                 window_tick.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
+
+                // Плавное торможение (инерция) вместо резкого стоп-крана
+                s.cursor_vx *= 0.85;
+                s.cursor_vy *= 0.85;
             } else {
                 // Idle
                 if s.cat_state != CatState::Idle {
@@ -207,10 +222,10 @@ fn main() {
                 } else {
                     s.frame = (s.frame + 1) % IDLE_SPRITES.len();
                 }
+                // В покое полностью гасим инерцию
+                s.cursor_vx = 0.0;
+                s.cursor_vy = 0.0;
             }
-
-            s.cursor_vx *= 0.3;
-            s.cursor_vy *= 0.3;
 
             drawing_tick.queue_draw();
             glib::ControlFlow::Continue
