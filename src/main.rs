@@ -7,23 +7,31 @@ use std::rc::Rc;
 use std::time::Duration;
 
 const CAT_SIZE: i32 = 128;
-const TICK_MS: u64 = 120;
+const TICK_MS: u64 = 150;
 
-const SPRITES: &[&str] = &[
-    "cat/main.png",
+const IDLE_SPRITES: &[&str] = &[
+    "cat/move 4.png",
+    "cat/move 5.png",
+    "cat/move 6.png",
+    "cat/move 7.png",
+];
+
+const MOVE_SPRITES: &[&str] = &[
     "cat/move 1.png",
     "cat/move 2.png",
     "cat/move 3.png",
 ];
+
+#[derive(PartialEq)]
+enum CatState { Idle, Moving }
 
 struct State {
     x: f64,
     y: f64,
     frame: usize,
     flip: bool,
+    cat_state: CatState,
     dragging: bool,
-    drag_start_x: f64,
-    drag_start_y: f64,
     drag_win_x: f64,
     drag_win_y: f64,
     cursor_vx: f64,
@@ -39,9 +47,8 @@ impl State {
             y: 400.0,
             frame: 0,
             flip: false,
+            cat_state: CatState::Idle,
             dragging: false,
-            drag_start_x: 0.0,
-            drag_start_y: 0.0,
             drag_win_x: 0.0,
             drag_win_y: 0.0,
             cursor_vx: 0.0,
@@ -52,8 +59,8 @@ impl State {
     }
 }
 
-fn load_textures() -> Vec<gdk_pixbuf::Pixbuf> {
-    SPRITES.iter().map(|path| {
+fn load_pixbufs(paths: &[&str]) -> Vec<gdk_pixbuf::Pixbuf> {
+    paths.iter().map(|path| {
         gdk_pixbuf::Pixbuf::from_file_at_scale(path, CAT_SIZE, CAT_SIZE, true)
             .unwrap_or_else(|e| panic!("Не могу загрузить {path}: {e}"))
     }).collect()
@@ -81,14 +88,7 @@ fn main() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
 
-        window.init_layer_shell();
-        window.set_layer(Layer::Overlay);
-        window.set_anchor(gtk4_layer_shell::Edge::Left, true);
-        window.set_anchor(gtk4_layer_shell::Edge::Top, true);
-        window.set_margin(gtk4_layer_shell::Edge::Left, 200);
-        window.set_margin(gtk4_layer_shell::Edge::Top, 400);
-        window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
-        // Layer shell настройка
+        // Layer shell — только один раз
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
         window.set_anchor(gtk4_layer_shell::Edge::Left, true);
@@ -97,18 +97,21 @@ fn main() {
         window.set_margin(gtk4_layer_shell::Edge::Top, 400);
         window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
 
-        let textures = Rc::new(load_textures());
+        let idle_frames = Rc::new(load_pixbufs(IDLE_SPRITES));
+        let move_frames = Rc::new(load_pixbufs(MOVE_SPRITES));
         let state = Rc::new(RefCell::new(State::new()));
 
         let drawing = DrawingArea::new();
         drawing.set_size_request(CAT_SIZE, CAT_SIZE);
 
-        // Рисуем кота
-        let textures_draw = textures.clone();
+        let idle_draw = idle_frames.clone();
+        let move_draw = move_frames.clone();
         let state_draw = state.clone();
-        drawing.set_draw_func(move |_, cr, w, h| {
+        drawing.set_draw_func(move |_, cr, w, _h| {
             let s = state_draw.borrow();
-            let tex = &textures_draw[s.frame % textures_draw.len()];
+
+            let frames = if s.cat_state == CatState::Idle { &idle_draw } else { &move_draw };
+            let tex = &frames[s.frame % frames.len()];
 
             // Прозрачный фон
             cr.set_source_rgba(0.0, 0.0, 0.0, 0.0);
@@ -131,11 +134,9 @@ fn main() {
         let drag = gtk4::GestureDrag::new();
 
         let state_begin = state.clone();
-        drag.connect_drag_begin(move |_, x, y| {
+        drag.connect_drag_begin(move |_, _, _| {
             let mut s = state_begin.borrow_mut();
             s.dragging = true;
-            s.drag_start_x = x;
-            s.drag_start_y = y;
             s.drag_win_x = s.x;
             s.drag_win_y = s.y;
         });
@@ -180,20 +181,32 @@ fn main() {
         timeout_add_local(Duration::from_millis(TICK_MS), move || {
             let mut s = state_tick.borrow_mut();
 
-            s.frame = (s.frame + 1) % SPRITES.len();
-
-            // Погоня за курсором
             let speed = (s.cursor_vx * s.cursor_vx + s.cursor_vy * s.cursor_vy).sqrt();
+
             if !s.dragging && speed > 8.0 {
-                let step = if speed > 20.0 { 8.0 } else { 4.0 };
-                let dx = s.cursor_vx;
-                let dy = s.cursor_vy;
-                let dist = (dx * dx + dy * dy).sqrt().max(1.0);
-                s.x += dx / dist * step;
-                s.y += dy / dist * step;
-                s.flip = dx < 0.0;
+                // Режим движения
+                if s.cat_state != CatState::Moving {
+                    s.cat_state = CatState::Moving;
+                    s.frame = 0;
+                } else {
+                    s.frame = (s.frame + 1) % MOVE_SPRITES.len();
+                }
+
+                let step = if speed > 25.0 { 12.0 } else { 6.0 };
+                let dist = speed.max(1.0);
+                s.x += s.cursor_vx / dist * step;
+                s.y += s.cursor_vy / dist * step;
+                s.flip = s.cursor_vx < 0.0;
                 window_tick.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
                 window_tick.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
+            } else {
+                // Idle
+                if s.cat_state != CatState::Idle {
+                    s.cat_state = CatState::Idle;
+                    s.frame = 0;
+                } else {
+                    s.frame = (s.frame + 1) % IDLE_SPRITES.len();
+                }
             }
 
             s.cursor_vx *= 0.3;
