@@ -7,9 +7,9 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 const CAT_SIZE: i32 = 192;
-const TICK_MS: u64 = 150;
+const TICK_MS: u64 = 20; // Около 50 кадров в секунду для идеальной плавности
 
-// Новые спрайты по вашему заданию
+// Спрайты анимаций
 const IDLE_SPRITES: &[&str] = &[
     "cat/move 4.png",
     "cat/move 5.png",
@@ -189,33 +189,33 @@ fn main() {
 
         window.set_child(Some(&drawing));
 
-        // Трекинг позиции курсора на экране (нужен для режима охоты)
+        // Глобальные координаты курсора
+        let cursor_x_ref = Rc::new(RefCell::new(0.0));
+        let cursor_y_ref = Rc::new(RefCell::new(0.0));
+
+        // Трекинг позиции курсора
         let motion = gtk4::EventControllerMotion::new();
-        let state_motion = state.clone();
+        let cx_motion = cursor_x_ref.clone();
+        let cy_motion = cursor_y_ref.clone();
         motion.connect_motion(move |_, mx, my| {
-            let s = state_motion.borrow();
-            // Если включен режим охоты, целевая точка кота — это позиция мыши
-            // (с учетом текущего смещения окна)
-            if s.is_hunting && !s.dragging {
-                // Можно обновить цель преследования
-            }
+            *cx_motion.borrow_mut() = mx;
+            *cy_motion.borrow_mut() = my;
         });
         drawing.add_controller(motion);
 
-        // Универсальный обработчик кликов и зажатий
+        // Обработчик кликов и зажатий
         let click = gtk4::GestureClick::new();
         click.set_button(gdk4::BUTTON_PRIMARY);
 
         let state_press = state.clone();
-        click.connect_pressed(move |_, n_press, x, y| {
+        click.connect_pressed(move |_, n_press, _, _| {
             let mut s = state_press.borrow_mut();
             if n_press == 1 {
-                // Запоминаем время начала нажатия для проверки 3 секунд зажатия
                 s.press_start_time = Some(Instant::now());
                 s.drag_win_x = s.x;
                 s.drag_win_y = s.y;
             } else if n_press == 2 {
-                // Двойной клик — побегать по экрану (сбрасываем охоту)
+                // Двойной клик — рандомный бег
                 s.is_hunting = false;
                 s.rng_counter = s.rng_counter.wrapping_add(1);
                 s.random_run_until = Some(Instant::now() + rand_duration_secs(s.rng_counter));
@@ -231,85 +231,16 @@ fn main() {
             if s.dragging {
                 s.dragging = false;
             } else if n_press == 1 {
-                // Одиночный клик (не зажимали и не был двойным) — переключаем режим охоты за мышкой!
+                // Одиночный клик — переключение режима охоты за мышкой
                 s.is_hunting = !s.is_hunting;
-                s.random_run_until = None; // отменяем рандомный бег, если он был
+                s.random_run_until = None;
             }
         });
 
         drawing.add_controller(click);
-
-        let state_begin = state.clone();
-        drag.connect_drag_begin(move |_, _, _| {
-            let mut s = state_begin.borrow_mut();
-            s.dragging = true;
-            s.drag_win_x = s.x;
-            s.drag_win_y = s.y;
-        });
-
-        let state_update = state.clone();
-        let window_update = window.clone();
-        drag.connect_drag_update(move |_, dx, dy| {
-            let mut s = state_update.borrow_mut();
-            if s.dragging {
-                s.x = s.drag_win_x + dx;
-                s.y = s.drag_win_y + dy;
-                window_update.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
-                window_update.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
-            }
-        });
-
-        let state_end = state.clone();
-        drag.connect_drag_end(move |_, _, _| {
-            state_end.borrow_mut().dragging = false;
-        });
-
-        drawing.add_controller(drag);
-
-        // Трекинг курсора (если курсор двигается быстро, кот может за ним идти)
-        let motion = gtk4::EventControllerMotion::new();
-        let state_motion = state.clone();
-        motion.connect_motion(move |_, mx, my| {
-            let mut s = state_motion.borrow_mut();
-            s.cursor_vx = mx - s.prev_cursor_x;
-            s.cursor_vy = my - s.prev_cursor_y;
-            s.prev_cursor_x = mx;
-            s.prev_cursor_y = my;
-        });
-        drawing.add_controller(motion);
-
-        // Двойной клик — побегать по экрану
-        let click = gtk4::GestureClick::new();
-        click.set_button(gdk4::BUTTON_PRIMARY);
-        let state_click = state.clone();
-        click.connect_pressed(move |_gesture, n_press, _, _| {
-            if n_press == 2 {
-                let mut s = state_click.borrow_mut();
-                s.rng_counter = s.rng_counter.wrapping_add(1);
-                s.random_run_until = Some(Instant::now() + rand_duration_secs(s.rng_counter));
-                s.random_target = None;
-            }
-        });
-        drawing.add_controller(click);
-
         window.present();
 
         // Главный игровой тик
-        let state_tick = state.clone();
-        let drawing_tick = drawing.clone();
-        let window_tick = window.clone();
-
-        // Глобальные координаты курсора (отслеживаем через EventControllerMotion)
-        let cursor_x_ref = Rc::new(RefCell::new(0.0));
-        let cursor_y_ref = Rc::new(RefCell::new(0.0));
-
-        let cx_motion = cursor_x_ref.clone();
-        let cy_motion = cursor_y_ref.clone();
-        motion.connect_motion(move |_, mx, my| {
-            *cx_motion.borrow_mut() = mx;
-            *cy_motion.borrow_mut() = my;
-        });
-
         let state_tick = state.clone();
         let drawing_tick = drawing.clone();
         let window_tick = window.clone();
@@ -324,7 +255,7 @@ fn main() {
             if let Some(start_time) = s.press_start_time {
                 if !s.dragging && now.duration_since(start_time) >= Duration::from_secs(3) {
                     s.dragging = true;
-                    s.is_hunting = false; // сбрасываем охоту при начале перетаскивания
+                    s.is_hunting = false;
                     s.random_run_until = None;
                 }
             }
@@ -333,8 +264,7 @@ fn main() {
             if s.dragging {
                 let mx = *cursor_x_tick.borrow();
                 let my = *cursor_y_tick.borrow();
-                // Двигаем окно за курсором (центрируем спрайт под курсором или смещаем)
-                s.x = s.drag_win_x + mx; // Примерное смещение, либо используем абсолютные координаты экрана если доступны
+                s.x = s.drag_win_x + mx;
                 s.y = s.drag_win_y + my;
 
                 s.x = s.x.clamp(0.0, screen_width - CAT_SIZE as f64);
@@ -348,11 +278,10 @@ fn main() {
                 return glib::ControlFlow::Continue;
             }
 
-            // 2. Обработка режимов движения (Рандомный бег / Охота за мышкой / Обычный покой)
+            // 2. Обработка режимов движения
             let in_random_run = s.random_run_until.map_or(false, |until| now < until);
 
             if in_random_run {
-                // Случайные точки для бега
                 let need_new_target = s.random_target.is_none()
                     || now.duration_since(s.last_target_change).as_millis() > 800;
                 if need_new_target {
@@ -369,8 +298,6 @@ fn main() {
                     s.target_y = ty;
                 }
             } else if s.is_hunting {
-                // Режим охоты за мышкой: цель — текущие координаты курсора на экране
-                // (переводим локальные координаты виджета в координаты экрана/окна)
                 let mx = *cursor_x_tick.borrow();
                 let my = *cursor_y_tick.borrow();
                 s.target_x = s.x + mx - (CAT_SIZE as f64 / 2.0);
@@ -380,36 +307,32 @@ fn main() {
                     s.random_run_until = None;
                     s.random_target = None;
                 }
-                // Если не охотится и не бегает — плавно останавливаемся на месте
                 s.target_x = s.x;
                 s.target_y = s.y;
             }
 
-            // 3. Плавная физика движения (Lerp + инерция для максимальной плавности)
+            // 3. Плавная физика движения (Lerp)
             let dx = s.target_x - s.x;
             let dy = s.target_y - s.y;
             let dist = (dx * dx + dy * dy).sqrt();
-
-            let speed_threshold = 2.0;
+            let speed_threshold = 3.0;
             if dist > speed_threshold {
-                // Выбираем скорость в зависимости от режима (бег быстрее, ходьба плавно)
-                let max_speed = if in_random_run { 18.0 } else { 6.0 };
+                // Увеличили скорости, чтобы котик шустро бегал и ходил
+                let max_speed = if in_random_run { 35.0 } else { 14.0 };
                 let target_vx = (dx / dist) * max_speed;
                 let target_vy = (dy / dist) * max_speed;
 
-                // Плавное ускорение (Linear Interpolation / Lerp) для мягкости
-                s.vx += (target_vx - s.vx) * 0.25;
-                s.vy += (target_vy - s.vy) * 0.25;
+                // Плавное ускорение под 20мс тики
+                s.vx += (target_vx - s.vx) * 0.15;
+                s.vy += (target_vy - s.vy) * 0.15;
 
                 s.x += s.vx;
                 s.y += s.vy;
 
-                // Поворот спрайта по направлению движения
                 if s.vx.abs() > 0.5 {
                     s.flip = s.vx < 0.0;
                 }
 
-                // Выбор анимации (Бег или Ходьба)
                 let current_speed = (s.vx * s.vx + s.vy * s.vy).sqrt();
                 let desired_state = if current_speed > 8.0 {
                     CatState::Running
@@ -429,7 +352,6 @@ fn main() {
                     s.frame = (s.frame + 1) % max_frames;
                 }
             } else {
-                // Плавное торможение до полного покоя (Idle)
                 s.vx *= 0.7;
                 s.vy *= 0.7;
                 s.x += s.vx;
@@ -445,7 +367,6 @@ fn main() {
                 }
             }
 
-            // Ограничение по границам экрана
             s.x = s.x.clamp(0.0, screen_width - CAT_SIZE as f64);
             s.y = s.y.clamp(0.0, screen_height - CAT_SIZE as f64);
 
