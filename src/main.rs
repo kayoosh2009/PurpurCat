@@ -8,13 +8,28 @@ use std::time::{Duration, Instant};
 
 const CAT_SIZE: i32 = 192;
 const TICK_MS: u64 = 150;
-const IDLE_SPRITES: &[&str] = &["cat/main.png"];
-const MOVE_SPRITES: &[&str] = &["cat/main.png"];
 
-#[derive(PartialEq)]
+// Новые спрайты по вашему заданию
+const IDLE_SPRITES: &[&str] = &[
+    "cat/move 4.png",
+    "cat/move 5.png",
+    "cat/move 6.png",
+    "cat/move 7.png",
+];
+const WALK_SPRITES: &[&str] = &[
+    "cat/move 1.png",
+    "cat/move 2.png",
+];
+const RUN_SPRITES: &[&str] = &[
+    "cat/move 2.png",
+    "cat/move 3.png",
+];
+
+#[derive(PartialEq, Clone, Copy)]
 enum CatState {
     Idle,
-    Moving,
+    Walking,
+    Running,
 }
 
 struct State {
@@ -23,13 +38,22 @@ struct State {
     frame: usize,
     flip: bool,
     cat_state: CatState,
+    
+    // Перетаскивание по зажатию (3 сек)
     dragging: bool,
+    press_start_time: Option<Instant>,
     drag_win_x: f64,
     drag_win_y: f64,
-    cursor_vx: f64,
-    cursor_vy: f64,
-    prev_cursor_x: f64,
-    prev_cursor_y: f64,
+
+    // Режимы поведения
+    is_hunting: bool, // Охота за мышкой при клике
+
+    // Скорость и физика
+    vx: f64,
+    vy: f64,
+    target_x: f64,
+    target_y: f64,
+
     random_run_until: Option<Instant>,
     random_target: Option<(f64, f64)>,
     last_target_change: Instant,
@@ -37,13 +61,13 @@ struct State {
 }
 
 impl State {
-    fn new() -> Self {
+    fn new(start_x: f64, start_y: f64) -> Self {
         State {
-            x: 200.0,
-            y: 400.0,
+            x: start_x,
+            y: start_y,
             frame: 0,
-            flip: false,
-            cat_state: CatState::Idle,
+            flip: true, // Смотрим влево, так как появляемся справа
+            cat_state: CatState::Running,
             dragging: false,
             drag_win_x: 0.0,
             drag_win_y: 0.0,
@@ -51,7 +75,8 @@ impl State {
             cursor_vy: 0.0,
             prev_cursor_x: 0.0,
             prev_cursor_y: 0.0,
-            random_run_until: None,
+            // При старте бегаем 15 секунд
+            random_run_until: Some(Instant::now() + Duration::from_secs(15)),
             random_target: None,
             last_target_change: Instant::now(),
             rng_counter: 0,
@@ -71,7 +96,7 @@ fn rand_range(min: f64, max: f64, seed: usize) -> f64 {
 }
 
 fn rand_duration_secs(seed: usize) -> Duration {
-    let secs = 5 + (pseudo_rand(seed) * 26.0) as u64; // 5..30 секунд
+    let secs = 5 + (pseudo_rand(seed) * 11.0) as u64; // 5..15 секунд бега
     Duration::from_secs(secs)
 }
 
@@ -91,6 +116,18 @@ fn main() {
         .build();
 
     app.connect_activate(|app| {
+        // Получаем размеры экрана заранее для корректного стартового положения
+        let display = gdk4::Display::default().unwrap();
+        let monitor = display.monitors().item(0).expect("Нет мониторов");
+        let monitor = monitor.downcast::<gdk4::Monitor>().expect("Не монитор");
+        let geometry = monitor.geometry();
+        let screen_width = geometry.width() as f64;
+        let screen_height = geometry.height() as f64;
+
+        // Стартовая позиция: правый нижний угол
+        let start_x = screen_width - CAT_SIZE as f64 - 50.0;
+        let start_y = screen_height - CAT_SIZE as f64 - 50.0;
+
         let window = ApplicationWindow::builder()
             .application(app)
             .default_width(CAT_SIZE)
@@ -107,32 +144,36 @@ fn main() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
 
-        // Layer shell — только один раз
+        // Layer shell
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
         window.set_anchor(gtk4_layer_shell::Edge::Left, true);
         window.set_anchor(gtk4_layer_shell::Edge::Top, true);
-        window.set_margin(gtk4_layer_shell::Edge::Left, 200);
-        window.set_margin(gtk4_layer_shell::Edge::Top, 400);
+        window.set_margin(gtk4_layer_shell::Edge::Left, start_x as i32);
+        window.set_margin(gtk4_layer_shell::Edge::Top, start_y as i32);
         window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
 
         let idle_frames = Rc::new(load_pixbufs(IDLE_SPRITES));
-        let move_frames = Rc::new(load_pixbufs(MOVE_SPRITES));
-        let state = Rc::new(RefCell::new(State::new()));
+        let walk_frames = Rc::new(load_pixbufs(WALK_SPRITES));
+        let run_frames = Rc::new(load_pixbufs(RUN_SPRITES));
+        
+        let state = Rc::new(RefCell::new(State::new(start_x, start_y)));
 
         let drawing = DrawingArea::new();
         drawing.set_size_request(CAT_SIZE, CAT_SIZE);
 
         let idle_draw = idle_frames.clone();
-        let move_draw = move_frames.clone();
+        let walk_draw = walk_frames.clone();
+        let run_draw = run_frames.clone();
         let state_draw = state.clone();
+
         drawing.set_draw_func(move |_, cr, w, _h| {
             let s = state_draw.borrow();
 
-            let frames = if s.cat_state == CatState::Idle {
-                &idle_draw
-            } else {
-                &move_draw
+            let frames = match s.cat_state {
+                CatState::Idle => &idle_draw,
+                CatState::Walking => &walk_draw,
+                CatState::Running => &run_draw,
             };
             let tex = &frames[s.frame % frames.len()];
 
@@ -153,7 +194,7 @@ fn main() {
 
         window.set_child(Some(&drawing));
 
-        // Перетаскивание
+        // Перетаскивание мышью
         let drag = gtk4::GestureDrag::new();
 
         let state_begin = state.clone();
@@ -183,7 +224,7 @@ fn main() {
 
         drawing.add_controller(drag);
 
-        // Трекинг курсора
+        // Трекинг курсора (если курсор двигается быстро, кот может за ним идти)
         let motion = gtk4::EventControllerMotion::new();
         let state_motion = state.clone();
         motion.connect_motion(move |_, mx, my| {
@@ -195,7 +236,7 @@ fn main() {
         });
         drawing.add_controller(motion);
 
-        // Двойной клик — рандомный бег
+        // Двойной клик — побегать по экрану
         let click = gtk4::GestureClick::new();
         click.set_button(gdk4::BUTTON_PRIMARY);
         let state_click = state.clone();
@@ -211,33 +252,26 @@ fn main() {
 
         window.present();
 
-        // Тик
+        // Главный игровой тик
         let state_tick = state.clone();
         let drawing_tick = drawing.clone();
         let window_tick = window.clone();
-        // Получаем размер экрана для ограничения границ
-        let display = gdk4::Display::default().unwrap();
-        let monitor = display.monitors().item(0).expect("Нет мониторов");
-        let monitor = monitor.downcast::<gdk4::Monitor>().expect("Не монитор");
-        let geometry = monitor.geometry();
-        let screen_width = geometry.width() as f64;
-        let screen_height = geometry.height() as f64;
 
         timeout_add_local(Duration::from_millis(TICK_MS), move || {
             let mut s = state_tick.borrow_mut();
             let now = Instant::now();
 
-            // --- Рандомный бег по двойному клику ---
+            // Проверяем, активен ли режим рандомного бега (старт или двойной клик)
             let in_random_run = s.random_run_until.map_or(false, |until| now < until);
+            
             if in_random_run {
-                // Меняем цель каждые ~500 мс
                 let need_new_target = s.random_target.is_none()
-                    || now.duration_since(s.last_target_change).as_millis() > 500;
+                    || now.duration_since(s.last_target_change).as_millis() > 600;
                 if need_new_target {
                     s.rng_counter = s.rng_counter.wrapping_add(1);
-                    let tx = rand_range(0.0, screen_width - CAT_SIZE as f64, s.rng_counter);
+                    let tx = rand_range(50.0, screen_width - CAT_SIZE as f64 - 50.0, s.rng_counter);
                     s.rng_counter = s.rng_counter.wrapping_add(1);
-                    let ty = rand_range(0.0, screen_height - CAT_SIZE as f64, s.rng_counter);
+                    let ty = rand_range(50.0, screen_height - CAT_SIZE as f64 - 50.0, s.rng_counter);
                     s.random_target = Some((tx, ty));
                     s.last_target_change = now;
                 }
@@ -246,13 +280,13 @@ fn main() {
                     let dy = ty - s.y;
                     let dist = (dx * dx + dy * dy).sqrt();
                     if dist > 5.0 {
-                        // Задаём «вектор движения» как будто от курсора
-                        s.cursor_vx = dx / dist * 25.0;
-                        s.cursor_vy = dy / dist * 25.0;
+                        // Высокая скорость для бега
+                        s.cursor_vx = dx / dist * 32.0;
+                        s.cursor_vy = dy / dist * 32.0;
                     }
                 }
             } else if s.random_run_until.is_some() {
-                // Время рандомного бега вышло — сбрасываем
+                // Время бега вышло — останавливаем принудительный бег
                 s.random_run_until = None;
                 s.random_target = None;
                 s.cursor_vx = 0.0;
@@ -260,43 +294,56 @@ fn main() {
             }
 
             let speed = (s.cursor_vx * s.cursor_vx + s.cursor_vy * s.cursor_vy).sqrt();
-            if !s.dragging && speed > 1.5 {
-                // Режим движения
-                if s.cat_state != CatState::Moving {
-                    s.cat_state = CatState::Moving;
+
+            if !s.dragging && speed > 0.8 {
+                // Определяем: бег это или ходьба
+                let desired_state = if in_random_run || speed > 5.0 {
+                    CatState::Running
+                } else {
+                    CatState::Walking
+                };
+
+                if s.cat_state != desired_state {
+                    s.cat_state = desired_state;
                     s.frame = 0;
                 } else {
-                    s.frame = (s.frame + 1) % MOVE_SPRITES.len();
+                    let max_frames = match s.cat_state {
+                        CatState::Walking => WALK_SPRITES.len(),
+                        CatState::Running => RUN_SPRITES.len(),
+                        CatState::Idle => IDLE_SPRITES.len(),
+                    };
+                    s.frame = (s.frame + 1) % max_frames;
                 }
 
-                // Мягкая скорость
-                let target_speed = 10.0;
+                // Шаг движения
+                let target_speed = if s.cat_state == CatState::Running { 16.0 } else { 5.0 };
                 let dist = speed.max(1.0);
                 s.x += (s.cursor_vx / dist) * target_speed;
                 s.y += (s.cursor_vy / dist) * target_speed;
-                // Переворачиваем спрайт только при уверенном движении по X
-                if s.cursor_vx.abs() > 2.0 {
+
+                if s.cursor_vx.abs() > 1.0 {
                     s.flip = s.cursor_vx < 0.0;
                 }
-                // Ограничиваем границы экрана
+
+                // Границы экрана
                 s.x = s.x.clamp(0.0, screen_width - CAT_SIZE as f64);
                 s.y = s.y.clamp(0.0, screen_height - CAT_SIZE as f64);
+
                 window_tick.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
                 window_tick.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
-                // Очень плавное торможение (инерция)
-                s.cursor_vx *= 0.96;
-                s.cursor_vy *= 0.96;
+
+                s.cursor_vx *= 0.92;
+                s.cursor_vy *= 0.92;
             } else {
-                // Idle
+                // Idle (стоит на месте)
                 if s.cat_state != CatState::Idle {
                     s.cat_state = CatState::Idle;
                     s.frame = 0;
                 } else {
                     s.frame = (s.frame + 1) % IDLE_SPRITES.len();
                 }
-                // Плавное затухание в покое
-                s.cursor_vx *= 0.90;
-                s.cursor_vy *= 0.90;
+                s.cursor_vx *= 0.85;
+                s.cursor_vy *= 0.85;
             }
 
             drawing_tick.queue_draw();
