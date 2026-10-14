@@ -299,16 +299,62 @@ fn main() {
         let drawing_tick = drawing.clone();
         let window_tick = window.clone();
 
+        // Глобальные координаты курсора (отслеживаем через EventControllerMotion)
+        let cursor_x_ref = Rc::new(RefCell::new(0.0));
+        let cursor_y_ref = Rc::new(RefCell::new(0.0));
+
+        let cx_motion = cursor_x_ref.clone();
+        let cy_motion = cursor_y_ref.clone();
+        motion.connect_motion(move |_, mx, my| {
+            *cx_motion.borrow_mut() = mx;
+            *cy_motion.borrow_mut() = my;
+        });
+
+        let state_tick = state.clone();
+        let drawing_tick = drawing.clone();
+        let window_tick = window.clone();
+        let cursor_x_tick = cursor_x_ref.clone();
+        let cursor_y_tick = cursor_y_ref.clone();
+
         timeout_add_local(Duration::from_millis(TICK_MS), move || {
             let mut s = state_tick.borrow_mut();
             let now = Instant::now();
 
-            // Проверяем, активен ли режим рандомного бега (старт или двойной клик)
+            // 1. Проверка зажатия мыши на 3 секунды для начала перетаскивания
+            if let Some(start_time) = s.press_start_time {
+                if !s.dragging && now.duration_since(start_time) >= Duration::from_secs(3) {
+                    s.dragging = true;
+                    s.is_hunting = false; // сбрасываем охоту при начале перетаскивания
+                    s.random_run_until = None;
+                }
+            }
+
+            // Если кота перетаскивают мышкой:
+            if s.dragging {
+                let mx = *cursor_x_tick.borrow();
+                let my = *cursor_y_tick.borrow();
+                // Двигаем окно за курсором (центрируем спрайт под курсором или смещаем)
+                s.x = s.drag_win_x + mx; // Примерное смещение, либо используем абсолютные координаты экрана если доступны
+                s.y = s.drag_win_y + my;
+
+                s.x = s.x.clamp(0.0, screen_width - CAT_SIZE as f64);
+                s.y = s.y.clamp(0.0, screen_height - CAT_SIZE as f64);
+
+                window_tick.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
+                window_tick.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
+
+                s.cat_state = CatState::Idle;
+                drawing_tick.queue_draw();
+                return glib::ControlFlow::Continue;
+            }
+
+            // 2. Обработка режимов движения (Рандомный бег / Охота за мышкой / Обычный покой)
             let in_random_run = s.random_run_until.map_or(false, |until| now < until);
 
             if in_random_run {
+                // Случайные точки для бега
                 let need_new_target = s.random_target.is_none()
-                    || now.duration_since(s.last_target_change).as_millis() > 600;
+                    || now.duration_since(s.last_target_change).as_millis() > 800;
                 if need_new_target {
                     s.rng_counter = s.rng_counter.wrapping_add(1);
                     let tx = rand_range(50.0, screen_width - CAT_SIZE as f64 - 50.0, s.rng_counter);
@@ -319,28 +365,53 @@ fn main() {
                     s.last_target_change = now;
                 }
                 if let Some((tx, ty)) = s.random_target {
-                    let dx = tx - s.x;
-                    let dy = ty - s.y;
-                    let dist = (dx * dx + dy * dy).sqrt();
-                    if dist > 5.0 {
-                        // Высокая скорость для бега
-                        s.cursor_vx = dx / dist * 32.0;
-                        s.cursor_vy = dy / dist * 32.0;
-                    }
+                    s.target_x = tx;
+                    s.target_y = ty;
                 }
-            } else if s.random_run_until.is_some() {
-                // Время бега вышло — останавливаем принудительный бег
-                s.random_run_until = None;
-                s.random_target = None;
-                s.cursor_vx = 0.0;
-                s.cursor_vy = 0.0;
+            } else if s.is_hunting {
+                // Режим охоты за мышкой: цель — текущие координаты курсора на экране
+                // (переводим локальные координаты виджета в координаты экрана/окна)
+                let mx = *cursor_x_tick.borrow();
+                let my = *cursor_y_tick.borrow();
+                s.target_x = s.x + mx - (CAT_SIZE as f64 / 2.0);
+                s.target_y = s.y + my - (CAT_SIZE as f64 / 2.0);
+            } else {
+                if s.random_run_until.is_some() {
+                    s.random_run_until = None;
+                    s.random_target = None;
+                }
+                // Если не охотится и не бегает — плавно останавливаемся на месте
+                s.target_x = s.x;
+                s.target_y = s.y;
             }
 
-            let speed = (s.cursor_vx * s.cursor_vx + s.cursor_vy * s.cursor_vy).sqrt();
+            // 3. Плавная физика движения (Lerp + инерция для максимальной плавности)
+            let dx = s.target_x - s.x;
+            let dy = s.target_y - s.y;
+            let dist = (dx * dx + dy * dy).sqrt();
 
-            if !s.dragging && speed > 0.8 {
-                // Определяем: бег это или ходьба
-                let desired_state = if in_random_run || speed > 5.0 {
+            let speed_threshold = 2.0;
+            if dist > speed_threshold {
+                // Выбираем скорость в зависимости от режима (бег быстрее, ходьба плавно)
+                let max_speed = if in_random_run { 18.0 } else { 6.0 };
+                let target_vx = (dx / dist) * max_speed;
+                let target_vy = (dy / dist) * max_speed;
+
+                // Плавное ускорение (Linear Interpolation / Lerp) для мягкости
+                s.vx += (target_vx - s.vx) * 0.25;
+                s.vy += (target_vy - s.vy) * 0.25;
+
+                s.x += s.vx;
+                s.y += s.vy;
+
+                // Поворот спрайта по направлению движения
+                if s.vx.abs() > 0.5 {
+                    s.flip = s.vx < 0.0;
+                }
+
+                // Выбор анимации (Бег или Ходьба)
+                let current_speed = (s.vx * s.vx + s.vy * s.vy).sqrt();
+                let desired_state = if current_speed > 8.0 {
                     CatState::Running
                 } else {
                     CatState::Walking
@@ -357,41 +428,29 @@ fn main() {
                     };
                     s.frame = (s.frame + 1) % max_frames;
                 }
-
-                // Шаг движения
-                let target_speed = if s.cat_state == CatState::Running {
-                    16.0
-                } else {
-                    5.0
-                };
-                let dist = speed.max(1.0);
-                s.x += (s.cursor_vx / dist) * target_speed;
-                s.y += (s.cursor_vy / dist) * target_speed;
-
-                if s.cursor_vx.abs() > 1.0 {
-                    s.flip = s.cursor_vx < 0.0;
-                }
-
-                // Границы экрана
-                s.x = s.x.clamp(0.0, screen_width - CAT_SIZE as f64);
-                s.y = s.y.clamp(0.0, screen_height - CAT_SIZE as f64);
-
-                window_tick.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
-                window_tick.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
-
-                s.cursor_vx *= 0.92;
-                s.cursor_vy *= 0.92;
             } else {
-                // Idle (стоит на месте)
-                if s.cat_state != CatState::Idle {
-                    s.cat_state = CatState::Idle;
-                    s.frame = 0;
-                } else {
-                    s.frame = (s.frame + 1) % IDLE_SPRITES.len();
+                // Плавное торможение до полного покоя (Idle)
+                s.vx *= 0.7;
+                s.vy *= 0.7;
+                s.x += s.vx;
+                s.y += s.vy;
+
+                if s.vx.abs() < 0.2 && s.vy.abs() < 0.2 {
+                    if s.cat_state != CatState::Idle {
+                        s.cat_state = CatState::Idle;
+                        s.frame = 0;
+                    } else {
+                        s.frame = (s.frame + 1) % IDLE_SPRITES.len();
+                    }
                 }
-                s.cursor_vx *= 0.85;
-                s.cursor_vy *= 0.85;
             }
+
+            // Ограничение по границам экрана
+            s.x = s.x.clamp(0.0, screen_width - CAT_SIZE as f64);
+            s.y = s.y.clamp(0.0, screen_height - CAT_SIZE as f64);
+
+            window_tick.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
+            window_tick.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
 
             drawing_tick.queue_draw();
             glib::ControlFlow::Continue
