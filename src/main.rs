@@ -184,6 +184,14 @@ fn main() {
         let state_tick = state.clone();
         let drawing_tick = drawing.clone();
         let window_tick = window.clone();
+        // Получаем размер экрана для ограничения границ
+        let display = gdk4::Display::default().unwrap();
+        let monitor = display.monitors().iter().next().unwrap();
+        let monitor = monitor.unwrap();
+        let geometry = monitor.geometry();
+        let screen_width = geometry.width() as f64;
+        let screen_height = geometry.height() as f64;
+
         timeout_add_local(Duration::from_millis(TICK_MS), move || {
             let mut s = state_tick.borrow_mut();
             let speed = (s.cursor_vx * s.cursor_vx + s.cursor_vy * s.cursor_vy).sqrt();
@@ -197,23 +205,27 @@ fn main() {
                     s.frame = (s.frame + 1) % MOVE_SPRITES.len();
                 }
 
-                // Увеличиваем скорость (40 пикселей за тик вместо 6-12)
-                let target_speed = 40.0;
+                // Медленная плавная скорость (15 пикселей за тик)
+                let target_speed = 15.0;
                 let dist = speed.max(1.0);
                 s.x += (s.cursor_vx / dist) * target_speed;
                 s.y += (s.cursor_vy / dist) * target_speed;
 
-                // Переворачиваем спрайт только при уверенном движении по X (убираем дрожание)
+                // Переворачиваем спрайт только при уверенном движении по X
                 if s.cursor_vx.abs() > 2.0 {
                     s.flip = s.cursor_vx < 0.0;
                 }
 
+                // Ограничиваем границы экрана
+                s.x = s.x.clamp(0.0, screen_width - CAT_SIZE as f64);
+                s.y = s.y.clamp(0.0, screen_height - CAT_SIZE as f64);
+
                 window_tick.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
                 window_tick.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
 
-                // Плавное торможение (инерция) вместо резкого стоп-крана
-                s.cursor_vx *= 0.85;
-                s.cursor_vy *= 0.85;
+                // Очень плавное торможение (инерция)
+                s.cursor_vx *= 0.92;
+                s.cursor_vy *= 0.92;
             } else {
                 // Idle
                 if s.cat_state != CatState::Idle {
@@ -222,9 +234,9 @@ fn main() {
                 } else {
                     s.frame = (s.frame + 1) % IDLE_SPRITES.len();
                 }
-                // В покое полностью гасим инерцию
-                s.cursor_vx = 0.0;
-                s.cursor_vy = 0.0;
+                // Плавное затухание в покое
+                s.cursor_vx *= 0.85;
+                s.cursor_vy *= 0.85;
             }
 
             drawing_tick.queue_draw();
