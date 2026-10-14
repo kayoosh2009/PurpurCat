@@ -4,19 +4,12 @@ use gtk4::{Application, ApplicationWindow, DrawingArea};
 use gtk4_layer_shell::{Layer, LayerShell};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-const CAT_SIZE: i32 = 128;
+const CAT_SIZE: i32 = 192;
 const TICK_MS: u64 = 150;
-
-const IDLE_SPRITES: &[&str] = &[
-    "cat/move 4.png",
-    "cat/move 5.png",
-    "cat/move 6.png",
-    "cat/move 7.png",
-];
-
-const MOVE_SPRITES: &[&str] = &["cat/move 1.png", "cat/move 2.png", "cat/move 3.png"];
+const IDLE_SPRITES: &[&str] = &["cat/main.png"];
+const MOVE_SPRITES: &[&str] = &["cat/main.png"];
 
 #[derive(PartialEq)]
 enum CatState {
@@ -37,6 +30,10 @@ struct State {
     cursor_vy: f64,
     prev_cursor_x: f64,
     prev_cursor_y: f64,
+    random_run_until: Option<Instant>,
+    random_target: Option<(f64, f64)>,
+    last_target_change: Instant,
+    rng_counter: usize,
 }
 
 impl State {
@@ -54,8 +51,28 @@ impl State {
             cursor_vy: 0.0,
             prev_cursor_x: 0.0,
             prev_cursor_y: 0.0,
+            random_run_until: None,
+            random_target: None,
+            last_target_change: Instant::now(),
+            rng_counter: 0,
         }
     }
+}
+
+fn pseudo_rand(seed: usize) -> f64 {
+    let x = (seed as u64)
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    ((x >> 33) as f64) / (u32::MAX as f64)
+}
+
+fn rand_range(min: f64, max: f64, seed: usize) -> f64 {
+    min + pseudo_rand(seed) * (max - min)
+}
+
+fn rand_duration_secs(seed: usize) -> Duration {
+    let secs = 5 + (pseudo_rand(seed) * 26.0) as u64; // 5..30 секунд
+    Duration::from_secs(secs)
 }
 
 fn load_pixbufs(paths: &[&str]) -> Vec<gdk_pixbuf::Pixbuf> {
