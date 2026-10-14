@@ -186,8 +186,8 @@ fn main() {
         let window_tick = window.clone();
         // Получаем размер экрана для ограничения границ
         let display = gdk4::Display::default().unwrap();
-        let monitor = display.monitors().iter().next().unwrap();
-        let monitor = monitor.unwrap();
+        let monitor = display.monitors().item(0).expect("Нет мониторов");
+        let monitor = monitor.downcast::<gdk4::Monitor>().expect("Не монитор");
         let geometry = monitor.geometry();
         let screen_width = geometry.width() as f64;
         let screen_height = geometry.height() as f64;
