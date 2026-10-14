@@ -1,0 +1,9 @@
+[package]
+name = "miru"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+gtk4 = { version = "0.9", features = ["v4_10"] }
+gdk4 = "0.9"
+glib = "0.20"
