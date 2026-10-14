@@ -195,6 +195,20 @@ fn main() {
         });
         drawing.add_controller(motion);
 
+        // Двойной клик — рандомный бег
+        let click = gtk4::GestureClick::new();
+        click.set_button(gdk4::BUTTON_PRIMARY);
+        let state_click = state.clone();
+        click.connect_pressed(move |_gesture, n_press, _, _| {
+            if n_press == 2 {
+                let mut s = state_click.borrow_mut();
+                s.rng_counter = s.rng_counter.wrapping_add(1);
+                s.random_run_until = Some(Instant::now() + rand_duration_secs(s.rng_counter));
+                s.random_target = None;
+            }
+        });
+        drawing.add_controller(click);
+
         window.present();
 
         // Тик
@@ -211,8 +225,41 @@ fn main() {
 
         timeout_add_local(Duration::from_millis(TICK_MS), move || {
             let mut s = state_tick.borrow_mut();
-            let speed = (s.cursor_vx * s.cursor_vx + s.cursor_vy * s.cursor_vy).sqrt();
+            let now = Instant::now();
 
+            // --- Рандомный бег по двойному клику ---
+            let in_random_run = s.random_run_until.map_or(false, |until| now < until);
+            if in_random_run {
+                // Меняем цель каждые ~500 мс
+                let need_new_target = s.random_target.is_none()
+                    || now.duration_since(s.last_target_change).as_millis() > 500;
+                if need_new_target {
+                    s.rng_counter = s.rng_counter.wrapping_add(1);
+                    let tx = rand_range(0.0, screen_width - CAT_SIZE as f64, s.rng_counter);
+                    s.rng_counter = s.rng_counter.wrapping_add(1);
+                    let ty = rand_range(0.0, screen_height - CAT_SIZE as f64, s.rng_counter);
+                    s.random_target = Some((tx, ty));
+                    s.last_target_change = now;
+                }
+                if let Some((tx, ty)) = s.random_target {
+                    let dx = tx - s.x;
+                    let dy = ty - s.y;
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist > 5.0 {
+                        // Задаём «вектор движения» как будто от курсора
+                        s.cursor_vx = dx / dist * 25.0;
+                        s.cursor_vy = dy / dist * 25.0;
+                    }
+                }
+            } else if s.random_run_until.is_some() {
+                // Время рандомного бега вышло — сбрасываем
+                s.random_run_until = None;
+                s.random_target = None;
+                s.cursor_vx = 0.0;
+                s.cursor_vy = 0.0;
+            }
+
+            let speed = (s.cursor_vx * s.cursor_vx + s.cursor_vy * s.cursor_vy).sqrt();
             if !s.dragging && speed > 1.5 {
                 // Режим движения
                 if s.cat_state != CatState::Moving {
@@ -222,27 +269,23 @@ fn main() {
                     s.frame = (s.frame + 1) % MOVE_SPRITES.len();
                 }
 
-                // Медленная плавная скорость (15 пикселей за тик)
-                let target_speed = 15.0;
+                // Мягкая скорость
+                let target_speed = 10.0;
                 let dist = speed.max(1.0);
                 s.x += (s.cursor_vx / dist) * target_speed;
                 s.y += (s.cursor_vy / dist) * target_speed;
-
                 // Переворачиваем спрайт только при уверенном движении по X
                 if s.cursor_vx.abs() > 2.0 {
                     s.flip = s.cursor_vx < 0.0;
                 }
-
                 // Ограничиваем границы экрана
                 s.x = s.x.clamp(0.0, screen_width - CAT_SIZE as f64);
                 s.y = s.y.clamp(0.0, screen_height - CAT_SIZE as f64);
-
                 window_tick.set_margin(gtk4_layer_shell::Edge::Left, s.x as i32);
                 window_tick.set_margin(gtk4_layer_shell::Edge::Top, s.y as i32);
-
                 // Очень плавное торможение (инерция)
-                s.cursor_vx *= 0.92;
-                s.cursor_vy *= 0.92;
+                s.cursor_vx *= 0.96;
+                s.cursor_vy *= 0.96;
             } else {
                 // Idle
                 if s.cat_state != CatState::Idle {
@@ -252,8 +295,8 @@ fn main() {
                     s.frame = (s.frame + 1) % IDLE_SPRITES.len();
                 }
                 // Плавное затухание в покое
-                s.cursor_vx *= 0.85;
-                s.cursor_vy *= 0.85;
+                s.cursor_vx *= 0.90;
+                s.cursor_vy *= 0.90;
             }
 
             drawing_tick.queue_draw();
