@@ -72,6 +72,22 @@ fn main() {
             .decorated(false)
             .build();
 
+        // Прозрачность
+        let css = gtk4::CssProvider::new();
+        css.load_from_data("window { background: transparent; }");
+        gtk4::style_context_add_provider_for_display(
+            &gdk4::Display::default().unwrap(),
+            &css,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+
+        window.init_layer_shell();
+        window.set_layer(Layer::Overlay);
+        window.set_anchor(gtk4_layer_shell::Edge::Left, true);
+        window.set_anchor(gtk4_layer_shell::Edge::Top, true);
+        window.set_margin(gtk4_layer_shell::Edge::Left, 200);
+        window.set_margin(gtk4_layer_shell::Edge::Top, 400);
+        window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
         // Layer shell настройка
         window.init_layer_shell();
         window.set_layer(Layer::Overlay);
