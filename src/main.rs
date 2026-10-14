@@ -16,14 +16,8 @@ const IDLE_SPRITES: &[&str] = &[
     "cat/move 6.png",
     "cat/move 7.png",
 ];
-const WALK_SPRITES: &[&str] = &[
-    "cat/move 1.png",
-    "cat/move 2.png",
-];
-const RUN_SPRITES: &[&str] = &[
-    "cat/move 2.png",
-    "cat/move 3.png",
-];
+const WALK_SPRITES: &[&str] = &["cat/move 1.png", "cat/move 2.png"];
+const RUN_SPRITES: &[&str] = &["cat/move 2.png", "cat/move 3.png"];
 
 #[derive(PartialEq, Clone, Copy)]
 enum CatState {
@@ -38,7 +32,7 @@ struct State {
     frame: usize,
     flip: bool,
     cat_state: CatState,
-    
+
     // Перетаскивание по зажатию (3 сек)
     dragging: bool,
     press_start_time: Option<Instant>,
@@ -66,16 +60,17 @@ impl State {
             x: start_x,
             y: start_y,
             frame: 0,
-            flip: true, // Смотрим влево, так как появляемся справа
+            flip: true,
             cat_state: CatState::Running,
             dragging: false,
+            press_start_time: None,
             drag_win_x: 0.0,
             drag_win_y: 0.0,
-            cursor_vx: 0.0,
-            cursor_vy: 0.0,
-            prev_cursor_x: 0.0,
-            prev_cursor_y: 0.0,
-            // При старте бегаем 15 секунд
+            is_hunting: false,
+            vx: 0.0,
+            vy: 0.0,
+            target_x: start_x,
+            target_y: start_y,
             random_run_until: Some(Instant::now() + Duration::from_secs(15)),
             random_target: None,
             last_target_change: Instant::now(),
@@ -156,7 +151,7 @@ fn main() {
         let idle_frames = Rc::new(load_pixbufs(IDLE_SPRITES));
         let walk_frames = Rc::new(load_pixbufs(WALK_SPRITES));
         let run_frames = Rc::new(load_pixbufs(RUN_SPRITES));
-        
+
         let state = Rc::new(RefCell::new(State::new(start_x, start_y)));
 
         let drawing = DrawingArea::new();
@@ -194,8 +189,55 @@ fn main() {
 
         window.set_child(Some(&drawing));
 
-        // Перетаскивание мышью
-        let drag = gtk4::GestureDrag::new();
+        // Трекинг позиции курсора на экране (нужен для режима охоты)
+        let motion = gtk4::EventControllerMotion::new();
+        let state_motion = state.clone();
+        motion.connect_motion(move |_, mx, my| {
+            let s = state_motion.borrow();
+            // Если включен режим охоты, целевая точка кота — это позиция мыши
+            // (с учетом текущего смещения окна)
+            if s.is_hunting && !s.dragging {
+                // Можно обновить цель преследования
+            }
+        });
+        drawing.add_controller(motion);
+
+        // Универсальный обработчик кликов и зажатий
+        let click = gtk4::GestureClick::new();
+        click.set_button(gdk4::BUTTON_PRIMARY);
+
+        let state_press = state.clone();
+        click.connect_pressed(move |_, n_press, x, y| {
+            let mut s = state_press.borrow_mut();
+            if n_press == 1 {
+                // Запоминаем время начала нажатия для проверки 3 секунд зажатия
+                s.press_start_time = Some(Instant::now());
+                s.drag_win_x = s.x;
+                s.drag_win_y = s.y;
+            } else if n_press == 2 {
+                // Двойной клик — побегать по экрану (сбрасываем охоту)
+                s.is_hunting = false;
+                s.rng_counter = s.rng_counter.wrapping_add(1);
+                s.random_run_until = Some(Instant::now() + rand_duration_secs(s.rng_counter));
+                s.random_target = None;
+            }
+        });
+
+        let state_released = state.clone();
+        click.connect_released(move |_, n_press, _, _| {
+            let mut s = state_released.borrow_mut();
+            s.press_start_time = None;
+
+            if s.dragging {
+                s.dragging = false;
+            } else if n_press == 1 {
+                // Одиночный клик (не зажимали и не был двойным) — переключаем режим охоты за мышкой!
+                s.is_hunting = !s.is_hunting;
+                s.random_run_until = None; // отменяем рандомный бег, если он был
+            }
+        });
+
+        drawing.add_controller(click);
 
         let state_begin = state.clone();
         drag.connect_drag_begin(move |_, _, _| {
@@ -263,7 +305,7 @@ fn main() {
 
             // Проверяем, активен ли режим рандомного бега (старт или двойной клик)
             let in_random_run = s.random_run_until.map_or(false, |until| now < until);
-            
+
             if in_random_run {
                 let need_new_target = s.random_target.is_none()
                     || now.duration_since(s.last_target_change).as_millis() > 600;
@@ -271,7 +313,8 @@ fn main() {
                     s.rng_counter = s.rng_counter.wrapping_add(1);
                     let tx = rand_range(50.0, screen_width - CAT_SIZE as f64 - 50.0, s.rng_counter);
                     s.rng_counter = s.rng_counter.wrapping_add(1);
-                    let ty = rand_range(50.0, screen_height - CAT_SIZE as f64 - 50.0, s.rng_counter);
+                    let ty =
+                        rand_range(50.0, screen_height - CAT_SIZE as f64 - 50.0, s.rng_counter);
                     s.random_target = Some((tx, ty));
                     s.last_target_change = now;
                 }
@@ -316,7 +359,11 @@ fn main() {
                 }
 
                 // Шаг движения
-                let target_speed = if s.cat_state == CatState::Running { 16.0 } else { 5.0 };
+                let target_speed = if s.cat_state == CatState::Running {
+                    16.0
+                } else {
+                    5.0
+                };
                 let dist = speed.max(1.0);
                 s.x += (s.cursor_vx / dist) * target_speed;
                 s.y += (s.cursor_vy / dist) * target_speed;
