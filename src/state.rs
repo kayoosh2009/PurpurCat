@@ -1,0 +1,83 @@
+use std::time::{Duration, Instant};
+
+pub const CAT_SIZE: i32 = 192;
+pub const TICK_MS: u64 = 30;
+
+pub const IDLE_SPRITES: &[&str] = &[
+    "cat/move 4.png",
+    "cat/move 5.png",
+    "cat/move 6.png",
+    "cat/move 7.png",
+];
+pub const WALK_SPRITES: &[&str] = &["cat/move 1.png", "cat/move 2.png"];
+pub const RUN_SPRITES: &[&str] = &["cat/move 2.png", "cat/move 3.png"];
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum CatState {
+    Idle,
+    Walking,
+    Running,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum BehaviorMode {
+    Roaming,
+    Idle,
+    Running,
+    Hunting,
+    Dragging,
+}
+
+pub struct State {
+    pub x: f64,
+    pub y: f64,
+    pub frame: usize,
+    pub flip: bool,
+    pub cat_state: CatState,
+
+    pub dragging: bool,
+    pub press_start_time: Option<Instant>,
+    pub drag_win_x: f64,
+    pub drag_win_y: f64,
+
+    pub behavior: BehaviorMode,
+    pub behavior_until: Option<Instant>,
+
+    pub vx: f64,
+    pub vy: f64,
+    pub target_x: f64,
+    pub target_y: f64,
+
+    pub rng_counter: usize,
+    pub anim_tick: usize,
+    pub random_run_until: Option<Instant>,
+    pub random_target: Option<(f64, f64)>,
+    pub last_target_change: Instant,
+}
+
+impl State {
+    pub fn new(start_x: f64, start_y: f64) -> Self {
+        State {
+            x: start_x,
+            y: start_y,
+            frame: 0,
+            flip: true,
+            cat_state: CatState::Running,
+            dragging: false,
+            press_start_time: None,
+            drag_win_x: 0.0,
+            drag_win_y: 0.0,
+            behavior: BehaviorMode::Roaming,
+            behavior_until: Some(Instant::now() + Duration::from_secs(5)),
+            vx: 0.0,
+            vy: 0.0,
+            target_x: start_x,
+            target_y: start_y,
+            rng_counter: 0,
+            anim_tick: 0,
+            random_run_until: Some(Instant::now() + Duration::from_secs(15)),
+            random_target: None,
+            last_target_change: Instant::now(),
+        }
+    }
+}
