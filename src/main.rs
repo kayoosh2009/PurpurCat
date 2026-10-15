@@ -26,6 +26,15 @@ enum CatState {
     Running,
 }
 
+#[derive(PartialEq, Clone, Copy)]
+enum BehaviorMode {
+    Roaming,   // сам гуляет
+    Idle,      // стоит, осматривается
+    Running,   // резко куда-то несётся
+    Hunting,   // за курсором (по клику)
+    Dragging,  // его тащат
+}
+
 struct State {
     x: f64,
     y: f64,
@@ -40,7 +49,8 @@ struct State {
     drag_win_y: f64,
 
     // Режимы поведения
-    is_hunting: bool, // Охота за мышкой при клике
+    behavior: BehaviorMode,
+    behavior_until: Option<Instant>,
 
     // Скорость и физика
     vx: f64,
@@ -67,7 +77,8 @@ impl State {
             press_start_time: None,
             drag_win_x: 0.0,
             drag_win_y: 0.0,
-            is_hunting: false,
+            behavior: BehaviorMode::Roaming,
+            behavior_until: Some(Instant::now() + Duration::from_secs(5)),
             vx: 0.0,
             vy: 0.0,
             target_x: start_x,
