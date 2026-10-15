@@ -48,10 +48,13 @@ struct State {
     target_x: f64,
     target_y: f64,
 
+    route_points: Vec<(f64, f64)>,
+    route_index: usize,
+    last_route_time: Instant,
+    rng_counter: usize,
     random_run_until: Option<Instant>,
     random_target: Option<(f64, f64)>,
     last_target_change: Instant,
-    rng_counter: usize,
 }
 
 impl State {
@@ -71,10 +74,13 @@ impl State {
             vy: 0.0,
             target_x: start_x,
             target_y: start_y,
+            rng_counter: 0,
             random_run_until: Some(Instant::now() + Duration::from_secs(15)),
             random_target: None,
             last_target_change: Instant::now(),
-            rng_counter: 0,
+            route_points: Vec::new(),
+            route_index: 0,
+            last_route_time: Instant::now(),
         }
     }
 }
