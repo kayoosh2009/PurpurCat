@@ -28,11 +28,11 @@ enum CatState {
 
 #[derive(PartialEq, Clone, Copy)]
 enum BehaviorMode {
-    Roaming,   // сам гуляет
-    Idle,      // стоит, осматривается
-    Running,   // резко куда-то несётся
-    Hunting,   // за курсором (по клику)
-    Dragging,  // его тащат
+    Roaming,  // сам гуляет
+    Idle,     // стоит, осматривается
+    Running,  // резко куда-то несётся
+    Hunting,  // за курсором (по клику)
+    Dragging, // его тащат
 }
 
 struct State {
@@ -229,7 +229,7 @@ fn main() {
                 s.drag_win_y = s.y;
             } else if n_press == 2 {
                 // Двойной клик — рандомный бег
-                s.is_hunting = false;
+                s.behavior = BehaviorMode::Running;
                 s.rng_counter = s.rng_counter.wrapping_add(1);
                 s.random_run_until = Some(Instant::now() + rand_duration_secs(s.rng_counter));
                 s.random_target = None;
@@ -245,7 +245,11 @@ fn main() {
                 s.dragging = false;
             } else if n_press == 1 {
                 // Одиночный клик — переключение режима охоты за мышкой
-                s.is_hunting = !s.is_hunting;
+                s.behavior = if s.behavior == BehaviorMode::Hunting {
+                    BehaviorMode::Roaming
+                } else {
+                    BehaviorMode::Hunting
+                };
                 s.random_run_until = None;
             }
         });
@@ -268,7 +272,7 @@ fn main() {
             if let Some(start_time) = s.press_start_time {
                 if !s.dragging && now.duration_since(start_time) >= Duration::from_secs(3) {
                     s.dragging = true;
-                    s.is_hunting = false;
+                    s.behavior = BehaviorMode::Dragging;
                     s.random_run_until = None;
                 }
             }
@@ -291,37 +295,68 @@ fn main() {
                 return glib::ControlFlow::Continue;
             }
 
-            // 2. Обработка режимов движения
-            let in_random_run = s.random_run_until.map_or(false, |until| now < until);
+            // 2. Обработка режимов поведения
+            // Автоматическое переключение поведения по таймеру
+            if s.behavior == BehaviorMode::Roaming || s.behavior == BehaviorMode::Idle {
+                let expired = s.behavior_until.map_or(true, |until| now >= until);
+                if expired {
+                    s.rng_counter = s.rng_counter.wrapping_add(1);
+                    let roll = pseudo_rand(s.rng_counter);
+                    if roll < 0.4 {
+                        // 40% — идём куда-то гулять
+                        s.behavior = BehaviorMode::Roaming;
+                        s.rng_counter = s.rng_counter.wrapping_add(1);
+                        let tx = rand_range(50.0, screen_width - CAT_SIZE as f64 - 50.0, s.rng_counter);
+                        s.rng_counter = s.rng_counter.wrapping_add(1);
+                        let ty = rand_range(50.0, screen_height - CAT_SIZE as f64 - 50.0, s.rng_counter);
+                        s.random_target = Some((tx, ty));
+                        s.behavior_until = Some(now + Duration::from_secs(8));
+                    } else if roll < 0.7 {
+                        // 30% — стоим и осматриваемся
+                        s.behavior = BehaviorMode::Idle;
+                        s.random_target = None;
+                        s.behavior_until = Some(now + Duration::from_secs(4));
+                    } else {
+                        // 30% — резко бежим куда-то
+                        s.behavior = BehaviorMode::Running;
+                        s.rng_counter = s.rng_counter.wrapping_add(1);
+                        let tx = rand_range(50.0, screen_width - CAT_SIZE as f64 - 50.0, s.rng_counter);
+                        s.rng_counter = s.rng_counter.wrapping_add(1);
+                        let ty = rand_range(50.0, screen_height - CAT_SIZE as f64 - 50.0, s.rng_counter);
+                        s.random_target = Some((tx, ty));
+                        s.behavior_until = Some(now + Duration::from_secs(5));
+                    }
+                }
+            }
 
-            if in_random_run {
-                let need_new_target = s.random_target.is_none()
-                    || now.duration_since(s.last_target_change).as_millis() > 800;
-                if need_new_target {
-                    s.rng_counter = s.rng_counter.wrapping_add(1);
-                    let tx = rand_range(50.0, screen_width - CAT_SIZE as f64 - 50.0, s.rng_counter);
-                    s.rng_counter = s.rng_counter.wrapping_add(1);
-                    let ty =
-                        rand_range(50.0, screen_height - CAT_SIZE as f64 - 50.0, s.rng_counter);
-                    s.random_target = Some((tx, ty));
-                    s.last_target_change = now;
+            // Когда Running истёк — возвращаемся в Roaming
+            if s.behavior == BehaviorMode::Running {
+                let expired = s.behavior_until.map_or(true, |until| now >= until);
+                if expired {
+                    s.behavior = BehaviorMode::Roaming;
+                    s.behavior_until = None;
                 }
-                if let Some((tx, ty)) = s.random_target {
-                    s.target_x = tx;
-                    s.target_y = ty;
+            }
+
+            // Устанавливаем цель в зависимости от режима
+            match s.behavior {
+                BehaviorMode::Roaming | BehaviorMode::Running => {
+                    if let Some((tx, ty)) = s.random_target {
+                        s.target_x = tx;
+                        s.target_y = ty;
+                    }
                 }
-            } else if s.is_hunting {
-                let mx = *cursor_x_tick.borrow();
-                let my = *cursor_y_tick.borrow();
-                s.target_x = s.x + mx - (CAT_SIZE as f64 / 2.0);
-                s.target_y = s.y + my - (CAT_SIZE as f64 / 2.0);
-            } else {
-                if s.random_run_until.is_some() {
-                    s.random_run_until = None;
-                    s.random_target = None;
+                BehaviorMode::Hunting => {
+                    let mx = *cursor_x_tick.borrow();
+                    let my = *cursor_y_tick.borrow();
+                    s.target_x = s.x + mx - (CAT_SIZE as f64 / 2.0);
+                    s.target_y = s.y + my - (CAT_SIZE as f64 / 2.0);
                 }
-                s.target_x = s.x;
-                s.target_y = s.y;
+                BehaviorMode::Idle | BehaviorMode::Dragging => {
+                    s.target_x = s.x;
+                    s.target_y = s.y;
+                }
+            }
             }
 
             // 3. Плавная физика движения (Lerp)
@@ -331,7 +366,11 @@ fn main() {
             let speed_threshold = 3.0;
             if dist > speed_threshold {
                 // Увеличили скорости, чтобы котик шустро бегал и ходил
-                let max_speed = if in_random_run { 18.0 } else { 7.0 };
+                let max_speed = match s.behavior {
+                    BehaviorMode::Running => 18.0,
+                    BehaviorMode::Hunting => 12.0,
+                    _ => 5.0,
+                };
                 let target_vx = (dx / dist) * max_speed;
                 let target_vy = (dy / dist) * max_speed;
 
