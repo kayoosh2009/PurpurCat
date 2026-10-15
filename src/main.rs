@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 const CAT_SIZE: i32 = 192;
-const TICK_MS: u64 = 20; // Около 50 кадров в секунду для идеальной плавности
+const TICK_MS: u64 = 30;
 
 // Спрайты анимаций
 const IDLE_SPRITES: &[&str] = &[
@@ -49,6 +49,7 @@ struct State {
     target_y: f64,
 
     rng_counter: usize,
+    anim_tick: usize,
     random_run_until: Option<Instant>,
     random_target: Option<(f64, f64)>,
     last_target_change: Instant,
@@ -72,6 +73,7 @@ impl State {
             target_x: start_x,
             target_y: start_y,
             rng_counter: 0,
+            anim_tick: 0,
             random_run_until: Some(Instant::now() + Duration::from_secs(15)),
             random_target: None,
             last_target_change: Instant::now(),
@@ -318,7 +320,7 @@ fn main() {
             let speed_threshold = 3.0;
             if dist > speed_threshold {
                 // Увеличили скорости, чтобы котик шустро бегал и ходил
-                let max_speed = if in_random_run { 35.0 } else { 14.0 };
+                let max_speed = if in_random_run { 18.0 } else { 7.0 };
                 let target_vx = (dx / dist) * max_speed;
                 let target_vy = (dy / dist) * max_speed;
 
@@ -343,13 +345,17 @@ fn main() {
                 if s.cat_state != desired_state {
                     s.cat_state = desired_state;
                     s.frame = 0;
+                    s.anim_tick = 0;
                 } else {
-                    let max_frames = match s.cat_state {
-                        CatState::Walking => WALK_SPRITES.len(),
-                        CatState::Running => RUN_SPRITES.len(),
-                        CatState::Idle => IDLE_SPRITES.len(),
-                    };
-                    s.frame = (s.frame + 1) % max_frames;
+                    s.anim_tick += 1;
+                    if s.anim_tick % 3 == 0 {
+                        let max_frames = match s.cat_state {
+                            CatState::Walking => WALK_SPRITES.len(),
+                            CatState::Running => RUN_SPRITES.len(),
+                            CatState::Idle => IDLE_SPRITES.len(),
+                        };
+                        s.frame = (s.frame + 1) % max_frames;
+                    }
                 }
             } else {
                 s.vx *= 0.7;
@@ -361,8 +367,12 @@ fn main() {
                     if s.cat_state != CatState::Idle {
                         s.cat_state = CatState::Idle;
                         s.frame = 0;
+                        s.anim_tick = 0;
                     } else {
-                        s.frame = (s.frame + 1) % IDLE_SPRITES.len();
+                        s.anim_tick += 1;
+                        if s.anim_tick % 4 == 0 {
+                            s.frame = (s.frame + 1) % IDLE_SPRITES.len();
+                        }
                     }
                 }
             }
