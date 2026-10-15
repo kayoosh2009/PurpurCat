@@ -1,5 +1,5 @@
-mod state;
 mod physics;
+mod state;
 
 use glib::timeout_add_local;
 use gtk4::prelude::*;
@@ -9,7 +9,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use state::{State, BehaviorMode, CatState, CAT_SIZE, TICK_MS, IDLE_SPRITES, WALK_SPRITES, RUN_SPRITES};
+use state::{
+    BehaviorMode, CatState, State, CAT_SIZE, IDLE_SPRITES, RUN_SPRITES, TICK_MS, WALK_SPRITES,
+};
 
 fn load_pixbufs(paths: &[&str]) -> Vec<gdk_pixbuf::Pixbuf> {
     paths
@@ -124,7 +126,8 @@ fn main() {
             } else if n_press == 2 {
                 s.behavior = BehaviorMode::Running;
                 s.rng_counter = s.rng_counter.wrapping_add(1);
-                s.random_run_until = Some(Instant::now() + physics::rand_duration_secs(s.rng_counter));
+                s.random_run_until =
+                    Some(Instant::now() + physics::rand_duration_secs(s.rng_counter));
                 s.random_target = None;
             }
         });

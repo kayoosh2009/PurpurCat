@@ -1,5 +1,7 @@
+use crate::state::{
+    BehaviorMode, CatState, State, CAT_SIZE, IDLE_SPRITES, RUN_SPRITES, WALK_SPRITES,
+};
 use std::time::{Duration, Instant};
-use crate::state::{State, BehaviorMode, CatState, IDLE_SPRITES, WALK_SPRITES, RUN_SPRITES, CAT_SIZE};
 
 pub fn pseudo_rand(seed: usize) -> f64 {
     let x = (seed as u64)
@@ -122,7 +124,11 @@ pub fn tick(
         }
 
         let speed = (s.vx * s.vx + s.vy * s.vy).sqrt();
-        let desired = if speed > 8.0 { CatState::Running } else { CatState::Walking };
+        let desired = if speed > 8.0 {
+            CatState::Running
+        } else {
+            CatState::Walking
+        };
 
         if s.cat_state != desired {
             s.cat_state = desired;
