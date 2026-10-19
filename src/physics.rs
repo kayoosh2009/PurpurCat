@@ -137,7 +137,7 @@ pub fn tick(
             s.anim_tick += 1;
             if s.anim_tick % 3 == 0 {
                 let max_frames = match s.cat_state {
-                    CatState::Walking => anim::walk::SPRITES.len(),
+                    CatState::Walking => anim::run::SPRITES.len(),
                     CatState::Running => anim::run::SPRITES.len(),
                     CatState::Idle => anim::idle::SPRITES.len(),
                     CatState::Sleeping => anim::sleep::SPRITES_LOOP.len(),

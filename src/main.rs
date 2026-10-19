@@ -62,7 +62,6 @@ fn main() {
         window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
 
         let idle_frames = Rc::new(load_pixbufs(anim::idle::SPRITES));
-        let walk_frames = Rc::new(load_pixbufs(anim::walk::SPRITES));
         let run_frames = Rc::new(load_pixbufs(anim::run::SPRITES));
 
         let state = Rc::new(RefCell::new(State::new(start_x, start_y)));
@@ -71,7 +70,6 @@ fn main() {
         drawing.set_size_request(CAT_SIZE, CAT_SIZE);
 
         let idle_draw = idle_frames.clone();
-        let walk_draw = walk_frames.clone();
         let run_draw = run_frames.clone();
         let state_draw = state.clone();
 
@@ -79,7 +77,7 @@ fn main() {
             let s = state_draw.borrow();
             let frames = match s.cat_state {
                 CatState::Idle => &idle_draw,
-                CatState::Walking => &walk_draw,
+                CatState::Walking => &run_draw,
                 CatState::Running => &run_draw,
                 CatState::Sleeping => &idle_draw,
             };
