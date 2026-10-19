@@ -71,7 +71,7 @@ pub fn tick(
         if expired {
             s.rng_counter = s.rng_counter.wrapping_add(1);
             let roll = pseudo_rand(s.rng_counter);
-            if roll < 0.4 {
+            if roll < 0.6 {
                 s.behavior = BehaviorMode::Roaming;
                 s.rng_counter = s.rng_counter.wrapping_add(1);
                 let tx = rand_range(50.0, screen_width - CAT_SIZE as f64 - 50.0, s.rng_counter);
@@ -79,33 +79,17 @@ pub fn tick(
                 let ty = rand_range(50.0, screen_height - CAT_SIZE as f64 - 50.0, s.rng_counter);
                 s.random_target = Some((tx, ty));
                 s.behavior_until = Some(now + Duration::from_secs(8));
-            } else if roll < 0.7 {
+            } else {
                 s.behavior = BehaviorMode::Idle;
                 s.random_target = None;
                 s.behavior_until = Some(now + Duration::from_secs(4));
-            } else {
-                s.behavior = BehaviorMode::Running;
-                s.rng_counter = s.rng_counter.wrapping_add(1);
-                let tx = rand_range(50.0, screen_width - CAT_SIZE as f64 - 50.0, s.rng_counter);
-                s.rng_counter = s.rng_counter.wrapping_add(1);
-                let ty = rand_range(50.0, screen_height - CAT_SIZE as f64 - 50.0, s.rng_counter);
-                s.random_target = Some((tx, ty));
-                s.behavior_until = Some(now + Duration::from_secs(5));
             }
-        }
-    }
-
-    if s.behavior == BehaviorMode::Running {
-        let expired = s.behavior_until.map_or(true, |until| now >= until);
-        if expired {
-            s.behavior = BehaviorMode::Roaming;
-            s.behavior_until = None;
         }
     }
 
     // 4. Цель
     match s.behavior {
-        BehaviorMode::Roaming | BehaviorMode::Running => {
+        BehaviorMode::Roaming => {
             if let Some((tx, ty)) = s.random_target {
                 s.target_x = tx;
                 s.target_y = ty;
@@ -128,7 +112,6 @@ pub fn tick(
 
     if dist > 3.0 {
         let max_speed = match s.behavior {
-            BehaviorMode::Running => 10.0,
             BehaviorMode::Hunting => 7.0,
             _ => 3.0,
         };
@@ -160,9 +143,9 @@ pub fn tick(
             if s.anim_tick % 6 == 0 {
                 let max_frames = match s.cat_state {
                     CatState::Walking => anim::run::SPRITES.len(),
-                    CatState::Running => anim::run::SPRITES.len(),
                     CatState::Idle => anim::idle::SPRITES.len(),
                     CatState::Sleeping => anim::sleep::SPRITES_LOOP.len(),
+                    CatState::Running => anim::run::SPRITES.len(),
                 };
                 s.frame = (s.frame + 1) % max_frames;
             }

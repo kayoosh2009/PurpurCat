@@ -16,7 +16,6 @@ pub enum CatState {
 pub enum BehaviorMode {
     Roaming,
     Idle,
-    Running,
     Hunting,
     Dragging,
     Petting,
@@ -50,6 +49,7 @@ pub struct State {
     pub last_target_change: Instant,
     pub petting_tick: usize,
     pub petting_steps: usize,
+    pub click_count: usize,
 }
 
 impl State {
@@ -77,6 +77,7 @@ impl State {
             last_target_change: Instant::now(),
             petting_tick: 0,
             petting_steps: 0,
+            click_count: 0,
         }
     }
 }
