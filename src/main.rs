@@ -130,12 +130,13 @@ fn main() {
                 s.press_start_time = Some(Instant::now());
                 s.drag_win_x = s.x;
                 s.drag_win_y = s.y;
-            } else if n_press == 2 {
-                s.behavior = BehaviorMode::Running;
-                s.rng_counter = s.rng_counter.wrapping_add(1);
-                s.random_run_until =
-                    Some(Instant::now() + physics::rand_duration_secs(s.rng_counter));
-                s.random_target = None;
+                s.click_count += 1;
+                if s.click_count >= 5 {
+                    s.click_count = 0;
+                    s.behavior = BehaviorMode::Petting;
+                    s.petting_tick = 0;
+                    s.petting_steps = 0;
+                }
             }
         });
 
