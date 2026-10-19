@@ -105,9 +105,18 @@ fn main() {
         let motion = gtk4::EventControllerMotion::new();
         let cx_motion = cursor_x_ref.clone();
         let cy_motion = cursor_y_ref.clone();
+        let state_motion = state.clone();
         motion.connect_motion(move |_, mx, my| {
             *cx_motion.borrow_mut() = mx;
             *cy_motion.borrow_mut() = my;
+
+            let mut s = state_motion.borrow_mut();
+            if s.behavior != BehaviorMode::Dragging && s.behavior != BehaviorMode::Petting {
+                s.behavior = BehaviorMode::Petting;
+                s.petting_tick = 0;
+                s.petting_steps = 0;
+                s.flip = !s.flip;
+            }
         });
         drawing.add_controller(motion);
 

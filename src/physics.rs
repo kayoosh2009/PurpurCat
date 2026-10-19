@@ -43,6 +43,28 @@ pub fn tick(
         return;
     }
 
+    // 2.5. Поглаживание
+    if s.behavior == BehaviorMode::Petting {
+        s.petting_tick += 1;
+
+        if s.petting_steps < 3 {
+            // Делаем несколько шагов в сторону
+            s.x += if s.flip { -1.5 } else { 1.5 };
+            s.cat_state = CatState::Walking;
+            if s.petting_tick % 6 == 0 {
+                s.frame = (s.frame + 1) % anim::run::SPRITES.len();
+                s.petting_steps += 1;
+            }
+        } else {
+            // Переходим в сон
+            s.cat_state = CatState::Sleeping;
+            if s.petting_tick % 8 == 0 {
+                s.frame = (s.frame + 1) % anim::sleep::SPRITES_LOOP.len();
+            }
+        }
+        return;
+    }
+
     // 3. Автоматическое переключение поведения
     if s.behavior == BehaviorMode::Roaming || s.behavior == BehaviorMode::Idle {
         let expired = s.behavior_until.map_or(true, |until| now >= until);
@@ -93,7 +115,7 @@ pub fn tick(
             s.target_x = s.x + cursor_x - (CAT_SIZE as f64 / 2.0);
             s.target_y = s.y + cursor_y - (CAT_SIZE as f64 / 2.0);
         }
-        BehaviorMode::Idle | BehaviorMode::Dragging => {
+        BehaviorMode::Idle | BehaviorMode::Dragging | BehaviorMode::Petting => {
             s.target_x = s.x;
             s.target_y = s.y;
         }

@@ -19,6 +19,7 @@ pub enum BehaviorMode {
     Running,
     Hunting,
     Dragging,
+    Petting,
 }
 
 pub struct State {
@@ -47,6 +48,8 @@ pub struct State {
     pub random_target: Option<(f64, f64)>,
     #[allow(dead_code)]
     pub last_target_change: Instant,
+    pub petting_tick: usize,
+    pub petting_steps: usize,
 }
 
 impl State {
@@ -72,6 +75,8 @@ impl State {
             random_run_until: Some(Instant::now() + Duration::from_secs(15)),
             random_target: None,
             last_target_change: Instant::now(),
+            petting_tick: 0,
+            petting_steps: 0,
         }
     }
 }
