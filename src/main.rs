@@ -81,6 +81,7 @@ fn main() {
                 CatState::Idle => &idle_draw,
                 CatState::Walking => &walk_draw,
                 CatState::Running => &run_draw,
+                CatState::Sleeping => &idle_draw,
             };
             let tex = &frames[s.frame % frames.len()];
 

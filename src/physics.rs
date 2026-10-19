@@ -1,5 +1,5 @@
-use crate::state::{BehaviorMode, CatState, State, CAT_SIZE};
 use crate::anim;
+use crate::state::{BehaviorMode, CatState, State, CAT_SIZE};
 use std::time::{Duration, Instant};
 
 pub fn pseudo_rand(seed: usize) -> f64 {

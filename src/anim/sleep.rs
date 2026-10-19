@@ -6,10 +6,7 @@ pub const SPRITES_INTRO: &[&str] = &[
 ];
 
 // Зацикленная часть сна: 4 → 5 → 4 → 5 → ...
-pub const SPRITES_LOOP: &[&str] = &[
-    "cat/sleep_anim/4.png",
-    "cat/sleep_anim/5.png",
-];
+pub const SPRITES_LOOP: &[&str] = &["cat/sleep_anim/4.png", "cat/sleep_anim/5.png"];
 
 // Пробуждение (воспроизводится один раз): 4 → 3 → 2 → 1
 pub const SPRITES_WAKE: &[&str] = &[
