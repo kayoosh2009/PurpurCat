@@ -3,20 +3,12 @@ use std::time::{Duration, Instant};
 pub const CAT_SIZE: i32 = 192;
 pub const TICK_MS: u64 = 30;
 
-pub const IDLE_SPRITES: &[&str] = &[
-    "cat/move 4.png",
-    "cat/move 5.png",
-    "cat/move 6.png",
-    "cat/move 7.png",
-];
-pub const WALK_SPRITES: &[&str] = &["cat/move 1.png", "cat/move 2.png"];
-pub const RUN_SPRITES: &[&str] = &["cat/move 2.png", "cat/move 3.png"];
-
 #[derive(PartialEq, Clone, Copy)]
 pub enum CatState {
     Idle,
     Walking,
     Running,
+    Sleeping,
 }
 
 #[derive(PartialEq, Clone, Copy)]

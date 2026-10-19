@@ -1,3 +1,4 @@
+mod anim;
 mod physics;
 mod state;
 
@@ -9,9 +10,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use state::{
-    BehaviorMode, CatState, State, CAT_SIZE, IDLE_SPRITES, RUN_SPRITES, TICK_MS, WALK_SPRITES,
-};
+use state::{BehaviorMode, CatState, State, CAT_SIZE, TICK_MS};
 
 fn load_pixbufs(paths: &[&str]) -> Vec<gdk_pixbuf::Pixbuf> {
     paths
