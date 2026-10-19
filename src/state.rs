@@ -8,6 +8,7 @@ pub enum CatState {
     Idle,
     Walking,
     Running,
+    #[allow(dead_code)]
     Sleeping,
 }
 
@@ -44,6 +45,7 @@ pub struct State {
     pub anim_tick: usize,
     pub random_run_until: Option<Instant>,
     pub random_target: Option<(f64, f64)>,
+    #[allow(dead_code)]
     pub last_target_change: Instant,
 }
 
