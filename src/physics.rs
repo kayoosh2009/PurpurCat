@@ -1,6 +1,5 @@
-use crate::state::{
-    BehaviorMode, CatState, State, CAT_SIZE, IDLE_SPRITES, RUN_SPRITES, WALK_SPRITES,
-};
+use crate::state::{BehaviorMode, CatState, State, CAT_SIZE};
+use crate::anim;
 use std::time::{Duration, Instant};
 
 pub fn pseudo_rand(seed: usize) -> f64 {
@@ -138,9 +137,10 @@ pub fn tick(
             s.anim_tick += 1;
             if s.anim_tick % 3 == 0 {
                 let max_frames = match s.cat_state {
-                    CatState::Walking => WALK_SPRITES.len(),
-                    CatState::Running => RUN_SPRITES.len(),
-                    CatState::Idle => IDLE_SPRITES.len(),
+                    CatState::Walking => anim::walk::SPRITES.len(),
+                    CatState::Running => anim::run::SPRITES.len(),
+                    CatState::Idle => anim::idle::SPRITES.len(),
+                    CatState::Sleeping => anim::sleep::SPRITES_LOOP.len(),
                 };
                 s.frame = (s.frame + 1) % max_frames;
             }
@@ -159,7 +159,7 @@ pub fn tick(
             } else {
                 s.anim_tick += 1;
                 if s.anim_tick % 4 == 0 {
-                    s.frame = (s.frame + 1) % IDLE_SPRITES.len();
+                    s.frame = (s.frame + 1) % anim::idle::SPRITES.len();
                 }
             }
         }

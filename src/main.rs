@@ -61,9 +61,9 @@ fn main() {
         window.set_margin(gtk4_layer_shell::Edge::Top, start_y as i32);
         window.set_keyboard_mode(gtk4_layer_shell::KeyboardMode::None);
 
-        let idle_frames = Rc::new(load_pixbufs(IDLE_SPRITES));
-        let walk_frames = Rc::new(load_pixbufs(WALK_SPRITES));
-        let run_frames = Rc::new(load_pixbufs(RUN_SPRITES));
+        let idle_frames = Rc::new(load_pixbufs(anim::idle::SPRITES));
+        let walk_frames = Rc::new(load_pixbufs(anim::walk::SPRITES));
+        let run_frames = Rc::new(load_pixbufs(anim::run::SPRITES));
 
         let state = Rc::new(RefCell::new(State::new(start_x, start_y)));
 
