@@ -106,9 +106,9 @@ pub fn tick(
 
     if dist > 3.0 {
         let max_speed = match s.behavior {
-            BehaviorMode::Running => 18.0,
-            BehaviorMode::Hunting => 12.0,
-            _ => 5.0,
+            BehaviorMode::Running => 10.0,
+            BehaviorMode::Hunting => 7.0,
+            _ => 3.0,
         };
         let target_vx = (dx / dist) * max_speed;
         let target_vy = (dy / dist) * max_speed;
@@ -135,7 +135,7 @@ pub fn tick(
             s.anim_tick = 0;
         } else {
             s.anim_tick += 1;
-            if s.anim_tick % 3 == 0 {
+            if s.anim_tick % 6 == 0 {
                 let max_frames = match s.cat_state {
                     CatState::Walking => anim::run::SPRITES.len(),
                     CatState::Running => anim::run::SPRITES.len(),
