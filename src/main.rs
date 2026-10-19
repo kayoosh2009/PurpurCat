@@ -63,6 +63,7 @@ fn main() {
 
         let idle_frames = Rc::new(load_pixbufs(anim::idle::SPRITES));
         let run_frames = Rc::new(load_pixbufs(anim::run::SPRITES));
+        let sleep_frames = Rc::new(load_pixbufs(anim::sleep::SPRITES_LOOP));
 
         let state = Rc::new(RefCell::new(State::new(start_x, start_y)));
 
@@ -71,6 +72,7 @@ fn main() {
 
         let idle_draw = idle_frames.clone();
         let run_draw = run_frames.clone();
+        let sleep_draw = sleep_frames.clone();
         let state_draw = state.clone();
 
         drawing.set_draw_func(move |_, cr, w, _h| {
@@ -79,7 +81,7 @@ fn main() {
                 CatState::Idle => &idle_draw,
                 CatState::Walking => &run_draw,
                 CatState::Running => &run_draw,
-                CatState::Sleeping => &idle_draw,
+                CatState::Sleeping => &sleep_draw,
             };
             let tex = &frames[s.frame % frames.len()];
 
