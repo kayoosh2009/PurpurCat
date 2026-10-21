@@ -55,12 +55,19 @@ pub fn tick(
                 s.frame = (s.frame + 1) % anim::run::SPRITES.len();
                 s.petting_steps += 1;
             }
-        } else {
-            // Переходим в сон
+        } else if s.petting_tick < 200 {
+            // Спим примерно 6 секунд
             s.cat_state = CatState::Sleeping;
             if s.petting_tick % 8 == 0 {
                 s.frame = (s.frame + 1) % anim::sleep::SPRITES_LOOP.len();
             }
+        } else {
+            // Просыпаемся и возвращаемся к обычной жизни
+            s.behavior = BehaviorMode::Roaming;
+            s.cat_state = CatState::Idle;
+            s.petting_tick = 0;
+            s.petting_steps = 0;
+            s.behavior_until = Some(now + Duration::from_secs(5));
         }
         return;
     }
