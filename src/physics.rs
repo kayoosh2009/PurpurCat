@@ -13,11 +13,6 @@ pub fn rand_range(min: f64, max: f64, seed: usize) -> f64 {
     min + pseudo_rand(seed) * (max - min)
 }
 
-pub fn rand_duration_secs(seed: usize) -> Duration {
-    let secs = 5 + (pseudo_rand(seed) * 11.0) as u64;
-    Duration::from_secs(secs)
-}
-
 pub fn tick(
     s: &mut State,
     now: Instant,
