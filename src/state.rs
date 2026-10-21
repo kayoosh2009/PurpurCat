@@ -29,7 +29,6 @@ pub struct State {
     pub cat_state: CatState,
 
     pub dragging: bool,
-    pub press_start_time: Option<Instant>,
     pub drag_win_x: f64,
     pub drag_win_y: f64,
 
@@ -61,7 +60,6 @@ impl State {
             flip: true,
             cat_state: CatState::Running,
             dragging: false,
-            press_start_time: None,
             drag_win_x: 0.0,
             drag_win_y: 0.0,
             behavior: BehaviorMode::Roaming,
