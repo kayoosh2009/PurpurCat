@@ -26,20 +26,11 @@ pub fn tick(
     cursor_x: f64,
     cursor_y: f64,
 ) {
-    // 1. Проверка зажатия на 3 сек
-    if let Some(start_time) = s.press_start_time {
-        if !s.dragging && now.duration_since(start_time) >= Duration::from_secs(3) {
-            s.dragging = true;
-            s.behavior = BehaviorMode::Dragging;
-            s.random_run_until = None;
-        }
-    }
-
-    // 2. Перетаскивание
+    // 1. Перетаскивание
     if s.dragging {
-        s.x = (s.drag_win_x + cursor_x).clamp(0.0, screen_width - CAT_SIZE as f64);
-        s.y = (s.drag_win_y + cursor_y).clamp(0.0, screen_height - CAT_SIZE as f64);
         s.cat_state = CatState::Idle;
+        s.vx = 0.0;
+        s.vy = 0.0;
         return;
     }
 

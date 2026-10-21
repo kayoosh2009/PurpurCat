@@ -113,35 +113,42 @@ fn main() {
         });
         drawing.add_controller(motion);
 
-        let click = gtk4::GestureClick::new();
-        click.set_button(gdk4::BUTTON_PRIMARY);
+        let drag = gtk4::GestureDrag::new();
+        drag.set_button(gdk4::BUTTON_PRIMARY);
 
-        let state_press = state.clone();
-        click.connect_pressed(move |_, n_press, _, _| {
-            let mut s = state_press.borrow_mut();
-            if n_press == 1 {
-                s.press_start_time = Some(Instant::now());
-                s.drag_win_x = s.x;
-                s.drag_win_y = s.y;
-                s.click_count += 1;
-                if s.click_count >= 5 {
-                    s.click_count = 0;
-                    s.behavior = BehaviorMode::Petting;
-                    s.petting_tick = 0;
-                    s.petting_steps = 0;
-                }
+        let state_drag_begin = state.clone();
+        drag.connect_drag_begin(move |_, _, _| {
+            let mut s = state_drag_begin.borrow_mut();
+            s.drag_win_x = s.x;
+            s.drag_win_y = s.y;
+            s.dragging = false;
+            s.click_count += 1;
+            if s.click_count >= 5 {
+                s.click_count = 0;
+                s.behavior = BehaviorMode::Petting;
+                s.petting_tick = 0;
+                s.petting_steps = 0;
             }
         });
 
-        let state_released = state.clone();
-        click.connect_released(move |_, n_press, _, _| {
-            let mut s = state_released.borrow_mut();
-            s.press_start_time = None;
+        let state_drag_update = state.clone();
+        drag.connect_drag_update(move |_, ox, oy| {
+            if ox.abs() > 4.0 || oy.abs() > 4.0 {
+                let mut s = state_drag_update.borrow_mut();
+                s.dragging = true;
+                s.behavior = BehaviorMode::Dragging;
+                s.x = (s.drag_win_x + ox).clamp(0.0, screen_width - CAT_SIZE as f64);
+                s.y = (s.drag_win_y + oy).clamp(0.0, screen_height - CAT_SIZE as f64);
+            }
+        });
 
-            if s.dragging {
+        let state_drag_end = state.clone();
+        drag.connect_drag_end(move |_, ox, oy| {
+            let mut s = state_drag_end.borrow_mut();
+            if s.dragging || ox.abs() > 4.0 || oy.abs() > 4.0 {
                 s.dragging = false;
                 s.behavior = BehaviorMode::Roaming;
-            } else if n_press == 1 {
+            } else {
                 s.behavior = if s.behavior == BehaviorMode::Hunting {
                     BehaviorMode::Roaming
                 } else {
@@ -151,7 +158,7 @@ fn main() {
             }
         });
 
-        drawing.add_controller(click);
+        drawing.add_controller(drag);
         window.present();
 
         let state_tick = state.clone();
