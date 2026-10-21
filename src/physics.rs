@@ -29,31 +29,54 @@ pub fn tick(
         return;
     }
 
-    // 2.5. Поглаживание
+    // 2.5. Поглаживание и сон
     if s.behavior == BehaviorMode::Petting {
         s.petting_tick += 1;
 
         if s.petting_steps < 3 {
-            // Делаем несколько шагов в сторону
+            // Делаем несколько шагов перед тем, как лечь
             s.x += if s.flip { -1.5 } else { 1.5 };
             s.cat_state = CatState::Walking;
             if s.petting_tick % 6 == 0 {
                 s.frame = (s.frame + 1) % anim::run::SPRITES.len();
                 s.petting_steps += 1;
             }
-        } else if s.petting_tick < 200 {
-            // Спим примерно 6 секунд
-            s.cat_state = CatState::Sleeping;
-            if s.petting_tick % 8 == 0 {
-                s.frame = (s.frame + 1) % anim::sleep::SPRITES_LOOP.len();
-            }
         } else {
-            // Просыпаемся и возвращаемся к обычной жизни
-            s.behavior = BehaviorMode::Roaming;
-            s.cat_state = CatState::Idle;
-            s.petting_tick = 0;
-            s.petting_steps = 0;
-            s.behavior_until = Some(now + Duration::from_secs(5));
+            if s.cat_state != CatState::SleepIntro && s.cat_state != CatState::Sleeping {
+                s.cat_state = CatState::SleepIntro;
+                s.frame = 0;
+                s.anim_tick = 0;
+            }
+
+            if s.cat_state == CatState::SleepIntro {
+                s.anim_tick += 1;
+                // 1 секунда между кадрами (33 тика по 30мс)
+                if s.anim_tick >= 33 {
+                    s.anim_tick = 0;
+                    s.frame += 1;
+                    if s.frame >= anim::sleep::SPRITES_INTRO.len() {
+                        s.cat_state = CatState::Sleeping;
+                        s.frame = 0;
+                    }
+                }
+            } else if s.cat_state == CatState::Sleeping {
+                s.anim_tick += 1;
+                // Медленная смена кадров сна 5 <-> 6 (каждые ~0.75 сек)
+                if s.anim_tick >= 25 {
+                    s.anim_tick = 0;
+                    s.frame = (s.frame + 1) % anim::sleep::SPRITES_LOOP.len();
+                }
+
+                // Кот спит около 15 секунд, затем просыпается
+                if s.petting_tick >= 600 {
+                    s.behavior = BehaviorMode::Roaming;
+                    s.cat_state = CatState::Idle;
+                    s.petting_tick = 0;
+                    s.petting_steps = 0;
+                    s.frame = 0;
+                    s.behavior_until = Some(now + Duration::from_secs(5));
+                }
+            }
         }
         return;
     }
@@ -137,6 +160,7 @@ pub fn tick(
                 let max_frames = match s.cat_state {
                     CatState::Walking => anim::run::SPRITES.len(),
                     CatState::Idle => anim::idle::SPRITES.len(),
+                    CatState::SleepIntro => anim::sleep::SPRITES_INTRO.len(),
                     CatState::Sleeping => anim::sleep::SPRITES_LOOP.len(),
                     CatState::Running => anim::run::SPRITES.len(),
                 };

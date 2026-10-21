@@ -8,7 +8,7 @@ pub enum CatState {
     Idle,
     Walking,
     Running,
-    #[allow(dead_code)]
+    SleepIntro,
     Sleeping,
 }
 

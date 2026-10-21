@@ -63,6 +63,7 @@ fn main() {
 
         let idle_frames = Rc::new(load_pixbufs(anim::idle::SPRITES));
         let run_frames = Rc::new(load_pixbufs(anim::run::SPRITES));
+        let sleep_intro_frames = Rc::new(load_pixbufs(anim::sleep::SPRITES_INTRO));
         let sleep_frames = Rc::new(load_pixbufs(anim::sleep::SPRITES_LOOP));
 
         let state = Rc::new(RefCell::new(State::new(start_x, start_y)));
@@ -72,6 +73,7 @@ fn main() {
 
         let idle_draw = idle_frames.clone();
         let run_draw = run_frames.clone();
+        let sleep_intro_draw = sleep_intro_frames.clone();
         let sleep_draw = sleep_frames.clone();
         let state_draw = state.clone();
 
@@ -81,6 +83,7 @@ fn main() {
                 CatState::Idle => &idle_draw,
                 CatState::Walking => &run_draw,
                 CatState::Running => &run_draw,
+                CatState::SleepIntro => &sleep_intro_draw,
                 CatState::Sleeping => &sleep_draw,
             };
             let tex = &frames[s.frame % frames.len()];
@@ -159,6 +162,18 @@ fn main() {
         });
 
         drawing.add_controller(drag);
+
+        let right_click = gtk4::GestureClick::new();
+        right_click.set_button(gdk4::BUTTON_SECONDARY);
+        let state_rc = state.clone();
+        right_click.connect_pressed(move |_, _, _, _| {
+            let mut s = state_rc.borrow_mut();
+            s.behavior = BehaviorMode::Petting;
+            s.petting_tick = 0;
+            s.petting_steps = 3; // сразу переходит в анимацию сна
+        });
+        drawing.add_controller(right_click);
+
         window.present();
 
         let state_tick = state.clone();
