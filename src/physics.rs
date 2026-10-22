@@ -36,8 +36,8 @@ pub fn tick(
         // Фаза пробуждения (обратная анимация кадров)
         if s.cat_state == CatState::WakeUp {
             s.anim_tick += 1;
-            // Каждые ~0.5 сек (17 тиков) уменьшаем кадр
-            if s.anim_tick >= 17 {
+            // 0.3 секунды между кадрами (10 тиков по 30мс)
+            if s.anim_tick >= 10 {
                 s.anim_tick = 0;
                 if s.frame > 0 {
                     s.frame -= 1;
@@ -71,8 +71,8 @@ pub fn tick(
 
             if s.cat_state == CatState::SleepIntro {
                 s.anim_tick += 1;
-                // 1 секунда между кадрами (33 тика по 30мс)
-                if s.anim_tick >= 33 {
+                // 0.3 секунды между кадрами (10 тиков по 30мс)
+                if s.anim_tick >= 10 {
                     s.anim_tick = 0;
                     s.frame += 1;
                     if s.frame >= anim::sleep::SPRITES_INTRO.len() {
