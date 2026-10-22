@@ -180,6 +180,7 @@ pub fn tick(
                     CatState::Idle => anim::idle::SPRITES.len(),
                     CatState::SleepIntro => anim::sleep::SPRITES_INTRO.len(),
                     CatState::Sleeping => anim::sleep::SPRITES_LOOP.len(),
+                    CatState::WakeUp => anim::sleep::SPRITES_INTRO.len(),
                     CatState::Running => anim::run::SPRITES.len(),
                 };
                 s.frame = (s.frame + 1) % max_frames;
