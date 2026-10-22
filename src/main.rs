@@ -85,6 +85,7 @@ fn main() {
                 CatState::Running => &run_draw,
                 CatState::SleepIntro => &sleep_intro_draw,
                 CatState::Sleeping => &sleep_draw,
+                CatState::WakeUp => &sleep_intro_draw,
             };
             let tex = &frames[s.frame % frames.len()];
 
@@ -168,9 +169,20 @@ fn main() {
         let state_rc = state.clone();
         right_click.connect_pressed(move |_, _, _, _| {
             let mut s = state_rc.borrow_mut();
-            s.behavior = BehaviorMode::Petting;
-            s.petting_tick = 0;
-            s.petting_steps = 3; // сразу переходит в анимацию сна
+            if s.cat_state == CatState::Sleeping || s.cat_state == CatState::SleepIntro {
+                // Если спит — просыпаемся задом наперёд с последнего кадра
+                s.cat_state = CatState::WakeUp;
+                s.frame = anim::sleep::SPRITES_INTRO.len() - 1;
+                s.anim_tick = 0;
+            } else if s.cat_state != CatState::WakeUp {
+                // Если бодрствует — начинаем засыпать
+                s.behavior = BehaviorMode::Petting;
+                s.cat_state = CatState::SleepIntro;
+                s.petting_tick = 0;
+                s.petting_steps = 3;
+                s.frame = 0;
+                s.anim_tick = 0;
+            }
         });
         drawing.add_controller(right_click);
 

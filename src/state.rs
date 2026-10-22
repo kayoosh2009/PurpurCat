@@ -10,6 +10,7 @@ pub enum CatState {
     Running,
     SleepIntro,
     Sleeping,
+    WakeUp,
 }
 
 #[derive(PartialEq, Clone, Copy)]
