@@ -29,9 +29,30 @@ pub fn tick(
         return;
     }
 
-    // 2.5. Поглаживание и сон
+    // 2.5. Поглаживание, сон и пробуждение
     if s.behavior == BehaviorMode::Petting {
         s.petting_tick += 1;
+
+        // Фаза пробуждения (обратная анимация кадров)
+        if s.cat_state == CatState::WakeUp {
+            s.anim_tick += 1;
+            // Каждые ~0.5 сек (17 тиков) уменьшаем кадр
+            if s.anim_tick >= 17 {
+                s.anim_tick = 0;
+                if s.frame > 0 {
+                    s.frame -= 1;
+                } else {
+                    // Дошли до первого кадра — кот полностью проснулся
+                    s.behavior = BehaviorMode::Roaming;
+                    s.cat_state = CatState::Idle;
+                    s.petting_tick = 0;
+                    s.petting_steps = 0;
+                    s.frame = 0;
+                    s.behavior_until = Some(now + Duration::from_secs(5));
+                }
+            }
+            return;
+        }
 
         if s.petting_steps < 3 {
             // Делаем несколько шагов перед тем, как лечь
@@ -67,14 +88,11 @@ pub fn tick(
                     s.frame = (s.frame + 1) % anim::sleep::SPRITES_LOOP.len();
                 }
 
-                // Кот спит около 15 секунд, затем просыпается
+                // Если время сна вышло — запускаем пробуждение
                 if s.petting_tick >= 600 {
-                    s.behavior = BehaviorMode::Roaming;
-                    s.cat_state = CatState::Idle;
-                    s.petting_tick = 0;
-                    s.petting_steps = 0;
-                    s.frame = 0;
-                    s.behavior_until = Some(now + Duration::from_secs(5));
+                    s.cat_state = CatState::WakeUp;
+                    s.frame = anim::sleep::SPRITES_INTRO.len() - 1;
+                    s.anim_tick = 0;
                 }
             }
         }
